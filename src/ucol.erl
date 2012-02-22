@@ -1,0 +1,465 @@
+-module(ucol).
+-export([compare/2, private_compare/2]).
+-define(RES(X), {X, ?LINE}).
+-define(VAL(X), erlang:element(1, X)).
+-define(DVAL(X), begin io:write(user, X), erlang:element(1, X) end).
+
+
+%% @doc Variable collation elements are reset to zero at levels one through
+%% three. In addition, a new fourth-level weight is appended, whose value 
+%% depends on the type, as shown in Table 12.
+%% Any subsequent primary or secondary ignorables following a variable are reset
+%% so that their weights at levels one through four are zero.
+%% ```
+%% * A combining grave accent after a space would have the value 
+%%   [.0000.0000.0000.0000].
+%% * A combining grave accent after a Capital A would be unchanged.'''
+%% @end
+
+private_compare(S1, S2) ->
+    B1 = unicode:characters_to_binary(S1),
+    B2 = unicode:characters_to_binary(S2),
+    compare(B1,B2).
+
+-spec compare(binary(), binary()) -> equal | less | greater.
+
+compare(S1, S2) ->
+    US1 = ucol_string:new(S1),
+    US2 = ucol_string:new(S2),
+    W1 = ucol_weights:new(),
+    compare_(US1, US2, W1, non_variable, non_variable).
+
+
+compare_(US1, US2, W1, T1, T2) ->
+    R1 = extract(US1, ducet(T1), false, false),
+    R2 = extract(US2, ducet(T2), false, false),
+
+    case {R1, R2} of
+    {stop, stop} -> ?RES(ucol_weights:result(W1));
+    {stop, {ok, E2, NewUS2}} -> compare_right_remain_(NewUS2, E2, W1);
+    {{ok, E1, NewUS1}, stop} ->  compare_left_remain_(NewUS1, E1, W1);
+    %% `{ok, WeightElement, NewUcolString}'
+    {{ok, E1, NewUS1}, {ok, E2, NewUS2}} ->
+%              io:format(user, "~n ~w ~n ~w ~n \t ~w ~n", [E1, E2, W1]),
+        case ucol_weights:compare(E1, E2, W1) of
+            less -> ?RES(less);
+            greater -> ?RES(greater);
+            equal -> ?RES(equal);
+            W2 ->
+                NewT1 = ucol_weights:type(E1), 
+                NewT2 = ucol_weights:type(E2), 
+%               io:format(user, "~n ~w ~n ~w ~n \t ~w ~n", [R1,R2, W2]),
+                compare_(NewUS1, NewUS2, W2, NewT1, NewT2)
+        end
+    end.
+
+
+compare_right_remain_(US2, E2, W1) ->
+    E1 = ucol_weights:empty(),
+    case ucol_weights:compare(E1, E2, W1) of
+        less -> ?RES(less);
+        greater -> ?RES(greater);
+        equal -> ?RES(equal);
+        W2 ->
+            T2 = ucol_weights:type(E2), 
+            R2 = extract(US2, ducet(T2), false, false),
+            case R2 of
+                stop -> ?RES(ucol_weights:result(W2));
+                {ok, NewE2, NewUS2} -> 
+                    compare_right_remain_(NewUS2, NewE2, W2) 
+            end
+    end.
+
+
+compare_left_remain_(US1, E1, W1) ->
+    E2 = ucol_weights:empty(),
+    case ucol_weights:compare(E1, E2, W1) of
+        less -> ?RES(less);
+        greater -> ?RES(greater);
+        equal -> ?RES(equal);
+        W2 ->
+            T1 = ucol_weights:type(E1), 
+            R1 = extract(US1, ducet(T1), false, false),
+            case R1 of
+                stop -> ?RES(ucol_weights:result(W2));
+                {ok, NewE1, NewUS1} -> 
+                    compare_left_remain_(NewUS1, NewE1, W2) 
+            end
+    end.
+
+
+ducet(variable) ->
+    ucol_unidata:var_ducet();
+% def
+ducet(non_variable) ->
+    ucol_unidata:ducet().
+
+%%ccc(Point) -> ucol_map:get(Point, ucol_unidata:ccc()).
+
+
+
+extract(Str1, Arr, LastSkippedClass, LastClass) ->
+    IsFirst = LastClass =:= false,
+    case ucol_string:head(Str1) of
+        {{Point, Class}, Str2} ->
+        %% If LastClass =:= false, then it is first point in combining weight.
+
+        %% A non-starter in a string is called blocked if there is another 
+        %% non-starter of the same canonical combining class or zero between 
+        %% it and the last character of canonical combining class 0.
+        HasSkipped = LastSkippedClass =/= false,
+        IsBlocked = HasSkipped andalso 
+            (LastSkippedClass =:= Class orelse Class =:= 0),
+        %% End of a suggestion list.
+        IsStopped = not IsFirst andalso LastClass > Class,
+        CanSkipped = LastClass =/= false 
+            andalso LastClass =< Class 
+            andalso Class =/= 0,
+
+%       io:format(user, "Point: ~w (~w), Last: ~w, Skipped: ~w ~n"
+%           "\tCanSkipped: ~w, IsStoped: ~w, IsBlocked: ~w ~n", 
+%           [Point, Class, LastClass, LastSkippedClass, 
+%            CanSkipped, IsStopped, IsBlocked]),
+
+        if IsStopped; IsBlocked ->
+            handle_stopped(ucol_string:back(Str2), Arr);
+
+            %% Last skipped point was non-blocked.
+            true -> 
+                case ucol_array:get(Point, Arr) of
+                    {element, Elem} -> {ok, Elem, ucol_string:fix(Str2)};
+
+                    %% Try search longer element
+                    {array, SubArr} -> 
+                        extract(Str2, SubArr, LastSkippedClass, Class);
+
+                    %% Make an implicit weight
+                    none when IsFirst -> 
+                        {ok, ucol_weights:implicit(Point), 
+                            ucol_string:fix(Str2)};
+
+                    %% Skip a char
+                    none when CanSkipped -> 
+                        Str3 = ucol_string:back_and_skip(Str2),
+                        extract(Str3, Arr, Class, Class);
+
+                    none -> 
+                        Str3 = ucol_string:back(Str2),
+                        handle_stopped(Str3, Arr);
+
+                    {empty, Type} -> 
+                        Str3 = ucol_string:fix(Str2),
+                        extract(Str3, ducet(Type), false, false) end
+
+            end;
+        stop when IsFirst -> stop;
+        stop -> 
+            case ucol_array:get(0, Arr) of
+                none -> handle_no_more(Str1); % no_more
+                {element, Elem} -> 
+                    {ok, Elem, ucol_string:fix(Str1)};
+                {empty, Type} -> stop end
+    end.
+
+
+handle_stopped(Str1, Arr) -> 
+    case ucol_array:get(0, Arr) of
+        none -> handle_no_more(Str1); % no_more
+
+        {element, Elem} -> 
+            {ok, Elem, ucol_string:fix(Str1)};
+
+        {empty, Type} -> 
+            Str2 = ucol_string:fix(Str1),
+            extract(Str2, ducet(Type), false, false) end.
+
+
+handle_no_more(Str1) ->
+%   io:format(user, "NO_MORE: ~w ~n", [Str1]),
+    Str2 = ucol_string:back_and_skip(Str1),
+    Buf = ucol_string:head_buffer(Str2),
+    Arr = extract_again(Buf, ducet(non_variable)),
+    LastSkippedClass = ucol_string:last_skipped_class(Str2),
+    LastClass = ucol_string:last_class(Str2),
+    extract(Str2, Arr, LastSkippedClass, LastClass).
+
+
+
+extract_again([{H,_Class}|T], Arr) -> 
+    {array, NewArr} = ucol_array:get(H, Arr),
+    extract_again(T, NewArr);
+
+extract_again([], Arr) -> Arr.
+
+
+
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-define(M, ucol).
+
+extract_components_test_() ->
+    S1 = ucol_string:new(<<"test">>),
+    {_X1, S2} = ucol_string:head(S1),
+    {_X2, S3} = ucol_string:head(S2),
+    {_X3, S4} = ucol_string:head(S3),
+    {_X4, S5} = ucol_string:head(S4),
+    stop = ucol_string:head(S5),
+    [].
+
+extract_components2_test_() ->
+    S1 = ucol_string:new(<<"test">>),
+    {{P1, _C1}, S2} = ucol_string:head(S1),
+    Arr = ducet(non_variable),
+    {element, _E1} = ucol_array:get(P1, Arr),
+    [].
+
+
+extract_test_() ->
+    S1 = ucol_string:new(<<"test">>),
+    Arr = ducet(non_variable),
+    LastSkippedClass = LastClass = false,
+    X = {ok, _W1, S2} = extract(S1, Arr, LastSkippedClass, LastClass),
+    {ok, _W2, S3} = extract(S2, Arr, LastSkippedClass, LastClass),
+    {ok, _W3, S4} = extract(S3, Arr, LastSkippedClass, LastClass),
+    {ok, _W4, S5} = extract(S4, Arr, LastSkippedClass, LastClass),
+    stop          = extract(S5, Arr, LastSkippedClass, LastClass),
+    [].
+
+compare_test_() ->
+    [?_assertEqual(?VAL(?M:compare(<<"test">>, <<"test">>)), equal)
+    ,?_assertEqual(?VAL(?M:compare(<<"test">>, <<"t">>)), greater)
+    ,?_assertEqual(?VAL(?M:compare(<<"abc">>, <<"def">>)), less)
+    ].
+
+
+%% http://unicode.org/reports/tr10/CollationTest.html
+conformance_test_() ->
+    [H|T] = ucol_testdata:shifted(),
+    {timeout, 120, ?_test(test_conformance(T, H, 0))}.
+
+
+%% ..each line in the file will order as being greater than or equal 
+%% to the previous one...
+test_conformance([H|T], Prev, ErrCnt) when is_binary(H) ->
+    Success = case ?VAL(?M:compare(Prev, H)) of
+        greater ->
+            io:format(user, "Error: ~w > ~w~n", 
+                [unicode:characters_to_list(Prev), 
+                 unicode:characters_to_list(H)]),
+            false;
+        X when X =:= less; X =:= equal -> true
+    end,
+    test_conformance(T, H, ErrCnt + boolean_to_integer(not Success));
+
+test_conformance([], Prev, ErrCnt) -> ?assertEqual(ErrCnt, 0).
+
+
+boolean_to_integer(false) -> 0;
+boolean_to_integer(true) -> 1.
+
+
+error1_test_() ->
+    S1 = unicode:characters_to_binary([820,68159]),
+    S2 = unicode:characters_to_binary([68159,97]),
+    [?_assertEqual(?VAL(?M:compare(S1, S2)), less) 
+    ].
+
+
+error2_test_() ->
+    S1 = unicode:characters_to_binary([4028,65]),
+    S2 = unicode:characters_to_binary([4018,98]),
+    [?_assertEqual(?VAL(?M:compare(S1, S2)), less) 
+    ].
+
+%% [43710,63] lower [820,43710]
+%% (ux@omicron)2> ux_uca:sort_array([43710,63]).          
+%% [[non_variable,9281,32,2,43710],[variable,640,32,2,63]]
+%% (ux@omicron)3> ux_uca:sort_array([820,43710]).         
+%% [[non_variable,0,124,2,820],[non_variable,9281,32,2,43710]]
+
+error3_test_() ->
+    S1 = unicode:characters_to_binary([43710,63]),
+    S2 = unicode:characters_to_binary([820,43710]),
+    [?_assertEqual(?VAL(?M:compare(S1, S2)), less) 
+    ].
+    
+
+
+
+%% A combining character sequence is called impeding if it contains any 
+%% conjoining jamo, or if it contains an L1-ignorable combining mark and 
+%% there is some character that canonically decomposes to a sequence 
+%% containing the same base character. 
+%% For example, the sequence <a, cedilla> is an impediment, because cedilla 
+%% is an L1-ignorable character, and there is some character 
+%% (for example, a-grave) that decomposes to a sequence containing the same 
+%% base letter a. Note that although strings in Normalization Form C generally 
+%% do not contain impeding sequences, there is nothing prohibiting them from
+%% containing them. Conformant implementations that do not support impeding 
+%% character sequences as part of their repertoire can also avoid performing 
+%% the normalization in S1.1 of the algorithm
+
+%% Error: [945,833,820] > [8049,820]
+
+%% (ux@omicron)5> ux_uca:sort_array([8049,820]).               
+%% [[non_variable,6364,32,2,945],
+%%  [non_variable,0,50,2,769],
+%%  [non_variable,0,124,2,820]]
+%% (ux@omicron)6> ux_uca:sort_array([945,833,820]).         
+%% [[non_variable,6364,32,2,945],
+%%  [non_variable,0,50,2,833],
+%%  [non_variable,0,124,2,820]]
+
+error4_test_() ->
+    %% [945,833,820] -> to nfd -> [945,820,769]
+    %% [8049,820] -> to_nfd -> [945,820,769 (ccc 230)]
+    %% [ux_unidata:ccc(X) || X <- [945,833,820]].
+    %%      [0,230,1]
+    %% 8049 {non_variable,6364,[32,50],[2,2],[65535,65535]}
+    %% 820  {non_variable,[],124,2,65535}
+
+    %% 945  {non_variable,6364,32,2,65535}
+    %% 833  {non_variable,[],50,2,65535}}
+    %% 820  {non_variable,[],124,2,65535}
+
+    S1 = unicode:characters_to_binary([945,833,820]),
+    S2 = unicode:characters_to_binary([8049,820]),
+    [?_assertEqual(?VAL(?M:compare(S1, S2)), equal) 
+    ,?_assertEqual(?VAL(?M:compare(S2, S1)), equal) 
+    ].
+
+
+%% Error: [65876,820] > [65876,33]
+
+%% (ux@omicron)1> ux_uca:sort_array([65876,820]).
+%% [[variable,5387,32,2,65501],
+%%  [variable,0,0,0,376],
+%%  [non_variable,0,124,2,820]]
+%% (ux@omicron)2> ux_uca:sort_array([65876,33]). 
+%% [[variable,5387,32,2,65501],
+%%  [variable,0,0,0,376],
+%%  [variable,635,32,2,33]]
+
+%% 65876 {variable,[],[],[],5387}
+%% 820   {non_variable,[],124,2,65535} (from ducet)
+%% 820   none                          (from var_ducet)
+%% 33    {variable,[],[],[],635}       (from ducet)
+%% 33    {variable,[],[],[],635}       (from var_ducet)
+error5_test_() ->
+    S1 = unicode:characters_to_binary([65876,820]),
+    S2 = unicode:characters_to_binary([65876,33]),
+    [?_assertEqual(?VAL(?M:compare(S1, S2)), less) 
+    ,?_assertEqual(?VAL(?M:compare(S2, S1)), greater) 
+    ].
+
+
+%% (ucol_data@omicron)3> ux_uca:sort_array([1140,1,783,97]).        
+%% [[non_variable,6972,32,8,1140],
+%%  [non_variable,0,101,2,783],
+%%  [non_variable,5539,32,2,97]]
+%% (ucol_data@omicron)4> ux_uca:sort_array([1141,98]).      
+%% [[non_variable,6972,32,2,1141],[non_variable,5561,32,2,98]]
+%% (ucol_data@omicron)15> ux_uca:sort_array([1140,783,97]).  
+%% [[non_variable,6976,32,8,1142],[non_variable,5539,32,2,97]]
+
+%% Error: [1140,1,783,97] > [1141,98]
+error6_test_() ->
+    S1 = unicode:characters_to_binary([1140,1,783,97]),
+    S2 = unicode:characters_to_binary([1141,98]),
+    [?_assertEqual(?VAL(?M:compare(S1, S2)), less) 
+    ,?_assertEqual(?VAL(?M:compare(S2, S1)), greater) 
+    ].
+
+
+%% Error: [1575,1,1621,97] > [1575,1425,1621,97]
+%% (ucol_data@omicron)16> ux_uca:sort_array([1575,1425,1621,97]).
+%% [[non_variable,7238,32,2,1575],
+%%  [non_variable,0,0,0,1425],
+%% [non_variable,0,178,2,1621],
+%% [non_variable,5539,32,2,97]]
+%% (ucol_data@omicron)17> ux_uca:sort_array([1575,1,1621,97]).   
+%% [[non_variable,7238,32,2,1575],
+%%  [non_variable,0,178,2,1621],
+%%  [non_variable,5539,32,2,97]]
+%%
+error7_test_() ->
+    S1 = unicode:characters_to_binary([1575,1,1621,97]),
+    S2 = unicode:characters_to_binary([1575,1425,1621,97]),
+    [?_assertEqual(?VAL(?M:compare(S1, S2)), equal) 
+    ].
+
+
+%% NO_MORE: {ucol_string,<<>>,[],[{3953,129},{4018,0}],[{33,0}]}
+%% Error: [4028,98] > [4018,3953,33]
+error8_test_() ->
+    S1 = unicode:characters_to_binary([4028,98]),
+    S2 = unicode:characters_to_binary([4018,3953,33]),
+    [?_assertEqual(?VAL(?M:compare(S1, S2)), less) 
+    ].
+
+
+%% Error: [194572,33] > [13470,63]
+error9_test_() ->
+    S1 = unicode:characters_to_binary([194572,33]),
+    S2 = unicode:characters_to_binary([13470,63]),
+    [?_assertEqual(?VAL(?M:compare(S1, S2)), less) 
+    ].
+
+
+%% (ucol_data@omicron)2> ux_string:to_nfd([44032,65]).
+%% [4352,4449,65]
+%% (ucol_data@omicron)3> ux_string:to_nfd([12814,97]).
+%% [12814,97]
+error10_test_() ->
+    S1 = unicode:characters_to_binary([44032,65]),
+    S2 = unicode:characters_to_binary([12814,97]),
+    [?_assertEqual(?VAL(?M:compare(S1, S2)), less) 
+    ].
+
+
+% Error: [55202,98] > [55203,33]
+error11_test_() ->
+    S1 = unicode:characters_to_binary([55202,98]),
+    S2 = unicode:characters_to_binary([55203,33]),
+    [?_assertEqual(?VAL(?M:compare(S1, S2)), less) 
+    ].
+
+
+%% Error: [12910,98] > [44032,4449,33]
+error12_test_() ->
+    S1 = unicode:characters_to_binary([12910,98]),
+    S2 = unicode:characters_to_binary([44032,4449,33]),
+    [?_assertEqual(?VAL(?M:compare(S1, S2)), less) 
+    ].
+
+
+%% (ucol_data@omicron)11> ux_string:to_nfd([4019,3969,63]).
+%% [4019,3953,3968,63]
+%% (ucol_data@omicron)12> ux_string:to_nfd([3960,820,3953]).
+%% [4019,820,3953,3968]
+
+%% (ucol_data@omicron)16> ux_uca:sort_array([3960,820,3953]).
+%% [[non_variable,9375,32,2,3960],
+%%  [non_variable,0,124,2,820],
+%%  [non_variable,9366,32,2,3953]]
+%% (ucol_data@omicron)17> ux_uca:sort_array([4019,3969,63]). 
+%% [[non_variable,9376,32,2,3961],[variable,640,32,2,63]]
+
+%% Error: [4019,3969,63] > [3960,820,3953]
+error13_test_() ->
+    S1 = unicode:characters_to_binary([4019,3969,63]),
+    S2 = unicode:characters_to_binary([3960,820,3953]),
+    [?_assertEqual(?VAL(?M:compare(S1, S2)), less) 
+    ].
+
+ 
+%% Error: [3780,1,3805,97] > [3780,1425,3805,97]
+%%        [   0,0,   0, 0]   [   0, 220,   0, 0]
+error14_test_() ->
+    S1 = unicode:characters_to_binary([3780,1,3805,97]),
+    S2 = unicode:characters_to_binary([3780,1425,3805,97]),
+    [?_assertEqual(?VAL(?M:compare(S1, S2)), equal) 
+    ].
+
+-endif.
