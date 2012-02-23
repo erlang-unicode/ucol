@@ -6,12 +6,18 @@
 
 
 -export([compare/3, 
+        compare_left_remain/2,
+        compare_right_remain/2,
         new/0, 
+        new/1, 
         empty/0,
         empty/1,
         result/1, 
         type/1, 
         is_empty/1]).
+
+-export([hangul_type/1,
+        hangul_point/1]).
 
 -export([implicit/1]).
 
@@ -30,6 +36,8 @@
 %% Create a new comparator
 new() -> undefined.
 
+new(equal) -> undefined;
+new(X) when X =:= less; X =:= greater -> #mem{l1=equal, l2=equal, l3=X}.
 
 %% Create a new weight. Used as a mock for compare/3
 empty() -> {non_variable, [], [], [], []}.
@@ -73,12 +81,16 @@ result_list([]) -> equal.
 %% Remains: {left, queue:queue()}, {right, queue:queue()}
 
 %% There were no difficult weights.
-compare(W, W, undefined) -> undefined;
-
 compare(W1, W2, undefined) ->
     {_, W1L1, W1L2, W1L3, W1L4} = W1,
     {_, W2L1, W2L2, W2L3, W2L4} = W2,
     
+    IsLeftHangulL = case W1L1 of
+        {hangul_l, _} -> true;
+        _ -> false end,
+
+    if W1 =:= W2, not IsLeftHangulL -> undefined; % Can be skipped
+    true ->
     {StateL, NewW1L1} = case W1L1 of
         {hangul_l, W1L1X} -> process_hangul(x, W1L1X);
         _W1L1 -> {x, W1L1} end,
@@ -118,12 +130,12 @@ compare(W1, W2, undefined) ->
 
     end  % L3
     end  % L2
-    end; % L1
+    end  % L1
+    end; % Can be skipped?
 
 compare(W1, W2, M=#mem{state=State, l1=X1, l2=X2, l3=X3, l4=X4}) ->
     {_, W1L1, W1L2, W1L3, W1L4} = W1,
     {_, W2L1, W2L2, W2L3, W2L4} = W2,
-
 
     {IsHangulL, W1L1X} = case W1L1 of
         {hangul_l, W1L1I} -> {true, W1L1I};
@@ -138,7 +150,6 @@ compare(W1, W2, M=#mem{state=State, l1=X1, l2=X2, l3=X3, l4=X4}) ->
         #state{left_l1=LeftL1, right_l1=RightL1} -> 
             {LeftL1, RightL1} end,
 
-
     {StateL, NewW1L1} = if
         IsHangulL; OldStateHangulL =/= x -> 
             process_hangul(OldStateHangulL, W1L1X);
@@ -148,7 +159,6 @@ compare(W1, W2, M=#mem{state=State, l1=X1, l2=X2, l3=X3, l4=X4}) ->
         IsHangulR; OldStateHangulR =/= x -> 
             process_hangul(OldStateHangulR, W2L1X);
         true -> {x, W2L1X} end,
-
 
     NewState = case {StateL, StateR} of
             {x, x} -> undefined;
@@ -191,6 +201,22 @@ compare(W1, W2, M=#mem{state=State, l1=X1, l2=X2, l3=X3, l4=X4}) ->
     end  % X3
     end  % L3
     end. % X4
+
+
+compare_left_remain(W1, M) ->
+    W2 = empty(),
+    case compare(W1, W2, M) of
+        #mem{l1={left,_}} -> greater;
+        X -> X
+    end.
+
+
+compare_right_remain(W2, M) ->
+    W1 = empty(),
+    case compare(W1, W2, M) of
+        #mem{l1={right,_}} -> less;
+        X -> X
+    end.
     
 
 %% Hangul (Terminator method): 
@@ -241,6 +267,22 @@ process_hangul(_, [H|T], Acc) ->
 process_hangul(State, [], Acc) ->
     {State, lists:reverse(Acc)}.
 
+
+hangul_point(Point) -> 
+    {element, {_, L1, _, _, _}} 
+        = ucol_array:get(Point, ucol_unidata:ducet()),
+    case L1 of
+        {hangul_l, [_|_]=L1X} -> [hangul_type(X) || X <- L1X];
+        {hangul_l, _} -> l;
+        [_|_] -> [hangul_type(X) || X <- L1];
+        _ -> hangul_type(L1)
+    end.
+
+
+hangul_type(X) when ?IS_L1_OF_HANGUL_L(X) -> l;
+hangul_type(X) when ?IS_L1_OF_HANGUL_V(X) -> v;
+hangul_type(X) when ?IS_L1_OF_HANGUL_T(X) -> t;
+hangul_type(X) -> x.
 
 %% Finish hangul comparation.
 hangul_result(lv) -> [?COL_HANGUL_TERMINATOR];
@@ -588,8 +630,15 @@ process_hangul_error12_test_() ->
 process_hangul_error12_var2_test_() ->
     S1 = [?COL_HANGUL_LBASE, ?COL_HANGUL_VBASE],
     S2 = [?COL_HANGUL_VBASE],
-    [?_assertEqual(process_hangul(x, S1), {lv, S1})
-    ,?_assertEqual(process_hangul(lv, S2), {x, S2 ++ [?COL_HANGUL_TERMINATOR]})
+    [?_assertEqual(process_hangul(x, S1), {lv, S1}) % LV
+    ,?_assertEqual(process_hangul(lv, S2), 
+        {x, S2 ++ [?COL_HANGUL_TERMINATOR]}) % LVV_
+    ].
+
+process_hangul_error14_test_() ->
+    S1 = [?COL_HANGUL_TBASE],
+    [?_assertEqual(process_hangul(lv, S1), 
+        {x, S1 ++ [?COL_HANGUL_TERMINATOR]}) % LVT_
     ].
 
 -endif.

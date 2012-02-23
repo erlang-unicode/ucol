@@ -22,26 +22,30 @@
 
 -record(ucol_string, {
     binary :: binary(),
-    skip = [] :: list(),
+    skip = [] :: [element()],
     %% zipper
-    head = [] :: list(),
-    tail = [] :: list()
+    head = [] :: [element()],
+    tail = [] :: [element()]
 }).
 
+-type ucol_string() :: #ucol_string{}.
 
+
+
+-spec new(binary()) -> ucol_string().
 new(Str) when is_binary(Str) ->
     #ucol_string{binary=Str}.
 
--spec head(#ucol_string{}) -> eol | eob | {element(), #ucol_string{}}.
+
+-spec head(ucol_string()) -> eol | eob | {element(), #ucol_string{}}.
 head(Rec=#ucol_string{tail=[], binary= <<>>}) ->
     stop;
 
-head(Rec=#ucol_string{head=Head, tail=[], skip=Skip, binary=Bin})
-    when is_binary(Bin) ->
+head(Rec=#ucol_string{tail=[], head=Head, skip=Skip, binary=Bin}) ->
     {[Cur|Tail], RemBin} = normalize(Bin, 0, []),
     {Cur, Rec#ucol_string{tail=Tail, head=[Cur|Head], binary=RemBin}};
 
-head(Rec=#ucol_string{head=Head, tail=[Cur|Tail]}) ->
+head(Rec=#ucol_string{tail=[Cur|Tail], head=Head}) ->
     {Cur, Rec#ucol_string{tail=Tail, head=[Cur|Head]}}.
 
 
@@ -137,7 +141,7 @@ proper_insert({_Point, Class}=X, [{_PointH, ClassH}=H|T], Acc)
     when ClassH > Class ->
     proper_insert(X, T, [H|Acc]);
 
-proper_insert({_Point, Class}=X, T, Acc) ->
+proper_insert(X, T, Acc) ->
     lists:reverse([X|Acc], T).
 
 
@@ -155,144 +159,144 @@ proper_insert_test_() ->
     ,?_assertEqual(proper_insert(
         {a,4}, [{d,8}, {c,4}, {b,0}], []), [{d,8}, {a,4}, {c,4}, {b,0}])
     ].
-%
-%
-%error1_v1_test_() ->
-%    Bin = unicode:characters_to_binary([68159,820]),
-%    S1 = ?M:new(Bin),
-%    {{Char1, _Class1}, S2} = ?M:head(S1),
-%    {{Char2, _Class2}, S3} = ?M:head(S2),
-%    Stop = ?M:head(S3),
-%    [?_assertEqual(Char1, 820)
-%    ,?_assertEqual(Char2, 68159)
-%    ,?_assertEqual(Stop, stop)
-%    ].
-%
-%
-%error1_v2_test_() ->
-%    Bin = unicode:characters_to_binary([68159,97]),
-%    S1 = ?M:new(Bin),
-%    {{Char1, _Class1}, S2} = ?M:head(S1),
-%    {{Char2, _Class2}, S3} = ?M:head(S2),
-%    Stop = ?M:head(S3),
-%    [?_assertEqual(Char1, 68159)
-%    ,?_assertEqual(Char2, 97)
-%    ,?_assertEqual(Stop, stop)
-%    ].
-%
-%
-%error2_test_() ->
-%    Bin = unicode:characters_to_binary([4018, 98]),
-%    S1 = ?M:new(Bin),
-%    {{Char1, _Class1}, S2} = ?M:head(S1),
-%    {{Char2, _Class2}, S3} = ?M:head(S2),
-%    S4 = ucol_string:back_and_skip(S3),
-%    Stop = ?M:head(S4),
-%    S5 = ?M:fix(S4),
-%    {{Char3, _Class3}, S6} = ?M:head(S5),
-%    [?_assertEqual(Char2, Char3)].
-%
-%
-%error4_test_() ->
-%    %% [945,833,820] -> to nfd -> [945,820,769]
-%    %% [8049,820] -> to_nfd -> [945,820,769 (ccc 230)]
-%    Bin = unicode:characters_to_binary([945, 833, 820]),
-%    S1 = ?M:new(Bin),
-%    {{Char1, _Class1}, S2} = ?M:head(S1),
-%    {{Char2, _Class2}, S3} = ?M:head(S2),
-%    {{Char3, _Class3}, S4} = ?M:head(S3),
-%    Stop = ?M:head(S4),
-%    [?_assertEqual(Char1, 945)
-%    ,?_assertEqual(Char2, 820)
-%    ,?_assertEqual(Char3, 769)
-%    ].
-%
-%
-%error7_test_() ->
-%    Bin = unicode:characters_to_binary([1575, 1425, 1621]),
-%    S1 = ?M:new(Bin),
-%    {{Char1, _Class1}, S2} = ?M:head(S1),
-%    {{Char2, _Class2}, S3} = ?M:head(S2), % x
-%    S4 = ?M:back_and_skip(S3),
-%    {{Char5, _Class5}, S5} = ?M:head(S4), % y
-%    S6 = ?M:back_and_skip(S5),
-%
-%    S7 = ?M:fix(S6),
-%    {{Char8, _Class8}, S8} = ?M:head(S7), % x
-%    {{Char9, _Class9}, S9} = ?M:head(S8), % y
-%
-%    [?_assertEqual(Char2, Char8)
-%    ,?_assertEqual(Char5, Char9)
-%    ].
-%
-%
-%error11_test_() ->
-%    %% ux_string:to_nfd([55202]).
-%    %% [4370,4469,4545]
-%    Bin = unicode:characters_to_binary([55202]),
-%    S1 = ?M:new(Bin),
-%    {{Char1, _Class1}, S2} = ?M:head(S1),
-%    {{Char2, _Class2}, S3} = ?M:head(S2),
-%    {{Char3, _Class3}, S4} = ?M:head(S3),
-%    Stop = ?M:head(S4),
-%    [?_assertEqual(Char1, 4370)
-%    ,?_assertEqual(Char2, 4469)
-%    ,?_assertEqual(Char3, 4545)
-%    ,?_assertEqual(Stop, stop)
-%    ].
-%
-%
-%error12_test_() ->
-%    %% ux_string:to_nfd([44032]).        
-%    %% [4352,4449]
-%    Bin = unicode:characters_to_binary([44032]),
-%    S1 = ?M:new(Bin),
-%    {{Char1, _Class1}, S2} = ?M:head(S1),
-%    {{Char2, _Class2}, S3} = ?M:head(S2),
-%    Stop = ?M:head(S3),
-%    [?_assertEqual(Char1, 4352)
-%    ,?_assertEqual(Char2, 4449)
-%    ,?_assertEqual(Stop, stop)
-%    ].
-%
-%
-%%% 4019 3953 3968 {non_variable,9376,32,2,65535}
-%%% 820            {non_variable,[],124,2,65535}
-%error13_test_() ->
-%    %% ux_string:to_nfd([3960,820,3953]).               
-%    %% [4019,820,3953,3968]
-%    Bin = unicode:characters_to_binary([3960,820,3953]),
-%    S1 = ?M:new(Bin),
-%    {{Char1, _Class1}, S2} = ?M:head(S1),
-%    {{Char2, _Class2}, S3} = ?M:head(S2),
-%    {{Char3, _Class3}, S4} = ?M:head(S3),
-%    {{Char4, _Class4}, S5} = ?M:head(S4),
-%    Stop = ?M:head(S5),
-%    [?_assertEqual(Char1, 4019) % 0
-%    ,?_assertEqual(Char2, 820)  % 1
-%    ,?_assertEqual(Char3, 3953) % 129
-%    ,?_assertEqual(Char4, 3968) % 130
-%    ,?_assertEqual(Stop, stop)
-%    ].
-%
-%%% 4019 3953 3968 {non_variable,9376,32,2,65535}
-%%% 63             {variable,[],[],[],640}
-%error13_case2_test_() ->
-%    %% ux_string:to_nfd([4019,3969,63]).                
-%    %% [4019,3953,3968,63]
-%    Bin = unicode:characters_to_binary([4019,3969,63]),
-%    S1 = ?M:new(Bin),
-%    {{Char1, _Class1}, S2} = ?M:head(S1),
-%    {{Char2, _Class2}, S3} = ?M:head(S2),
-%    {{Char3, _Class3}, S4} = ?M:head(S3),
-%    {{Char4, _Class4}, S5} = ?M:head(S4),
-%    Stop = ?M:head(S5),
-%    [?_assertEqual(Char1, 4019) % 0
-%    ,?_assertEqual(Char2, 3953) % 129
-%    ,?_assertEqual(Char3, 3968) % 130
-%    ,?_assertEqual(Char4, 63)   % 0
-%    ,?_assertEqual(Stop, stop)
-%    ].
+
+
+error1_v1_test_() ->
+    Bin = unicode:characters_to_binary([68159,820]),
+    S1 = ?M:new(Bin),
+    {{Char1, _Class1}, S2} = ?M:head(S1),
+    {{Char2, _Class2}, S3} = ?M:head(S2),
+    Stop = ?M:head(S3),
+    [?_assertEqual(Char1, 820)
+    ,?_assertEqual(Char2, 68159)
+    ,?_assertEqual(Stop, stop)
+    ].
+
+
+error1_v2_test_() ->
+    Bin = unicode:characters_to_binary([68159,97]),
+    S1 = ?M:new(Bin),
+    {{Char1, _Class1}, S2} = ?M:head(S1),
+    {{Char2, _Class2}, S3} = ?M:head(S2),
+    Stop = ?M:head(S3),
+    [?_assertEqual(Char1, 68159)
+    ,?_assertEqual(Char2, 97)
+    ,?_assertEqual(Stop, stop)
+    ].
+
+
+error2_test_() ->
+    Bin = unicode:characters_to_binary([4018, 98]),
+    S1 = ?M:new(Bin),
+    {{Char1, _Class1}, S2} = ?M:head(S1),
+    {{Char2, _Class2}, S3} = ?M:head(S2),
+    S4 = ucol_string:back_and_skip(S3),
+    Stop = ?M:head(S4),
+    S5 = ?M:fix(S4),
+    {{Char3, _Class3}, S6} = ?M:head(S5),
+    [?_assertEqual(Char2, Char3)].
+
+
+error4_test_() ->
+    %% [945,833,820] -> to nfd -> [945,820,769]
+    %% [8049,820] -> to_nfd -> [945,820,769 (ccc 230)]
+    Bin = unicode:characters_to_binary([945, 833, 820]),
+    S1 = ?M:new(Bin),
+    {{Char1, _Class1}, S2} = ?M:head(S1),
+    {{Char2, _Class2}, S3} = ?M:head(S2),
+    {{Char3, _Class3}, S4} = ?M:head(S3),
+    Stop = ?M:head(S4),
+    [?_assertEqual(Char1, 945)
+    ,?_assertEqual(Char2, 820)
+    ,?_assertEqual(Char3, 769)
+    ].
+
+
+error7_test_() ->
+    Bin = unicode:characters_to_binary([1575, 1425, 1621]),
+    S1 = ?M:new(Bin),
+    {{Char1, _Class1}, S2} = ?M:head(S1),
+    {{Char2, _Class2}, S3} = ?M:head(S2), % x
+    S4 = ?M:back_and_skip(S3),
+    {{Char5, _Class5}, S5} = ?M:head(S4), % y
+    S6 = ?M:back_and_skip(S5),
+
+    S7 = ?M:fix(S6),
+    {{Char8, _Class8}, S8} = ?M:head(S7), % x
+    {{Char9, _Class9}, S9} = ?M:head(S8), % y
+
+    [?_assertEqual(Char2, Char8)
+    ,?_assertEqual(Char5, Char9)
+    ].
+
+
+error11_test_() ->
+    %% ux_string:to_nfd([55202]).
+    %% [4370,4469,4545]
+    Bin = unicode:characters_to_binary([55202]),
+    S1 = ?M:new(Bin),
+    {{Char1, _Class1}, S2} = ?M:head(S1),
+    {{Char2, _Class2}, S3} = ?M:head(S2),
+    {{Char3, _Class3}, S4} = ?M:head(S3),
+    Stop = ?M:head(S4),
+    [?_assertEqual(Char1, 4370)
+    ,?_assertEqual(Char2, 4469)
+    ,?_assertEqual(Char3, 4545)
+    ,?_assertEqual(Stop, stop)
+    ].
+
+
+error12_test_() ->
+    %% ux_string:to_nfd([44032]).        
+    %% [4352,4449]
+    Bin = unicode:characters_to_binary([44032]),
+    S1 = ?M:new(Bin),
+    {{Char1, _Class1}, S2} = ?M:head(S1),
+    {{Char2, _Class2}, S3} = ?M:head(S2),
+    Stop = ?M:head(S3),
+    [?_assertEqual(Char1, 4352)
+    ,?_assertEqual(Char2, 4449)
+    ,?_assertEqual(Stop, stop)
+    ].
+
+
+%% 4019 3953 3968 {non_variable,9376,32,2,65535}
+%% 820            {non_variable,[],124,2,65535}
+error13_test_() ->
+    %% ux_string:to_nfd([3960,820,3953]).               
+    %% [4019,820,3953,3968]
+    Bin = unicode:characters_to_binary([3960,820,3953]),
+    S1 = ?M:new(Bin),
+    {{Char1, _Class1}, S2} = ?M:head(S1),
+    {{Char2, _Class2}, S3} = ?M:head(S2),
+    {{Char3, _Class3}, S4} = ?M:head(S3),
+    {{Char4, _Class4}, S5} = ?M:head(S4),
+    Stop = ?M:head(S5),
+    [?_assertEqual(Char1, 4019) % 0
+    ,?_assertEqual(Char2, 820)  % 1
+    ,?_assertEqual(Char3, 3953) % 129
+    ,?_assertEqual(Char4, 3968) % 130
+    ,?_assertEqual(Stop, stop)
+    ].
+
+%% 4019 3953 3968 {non_variable,9376,32,2,65535}
+%% 63             {variable,[],[],[],640}
+error13_case2_test_() ->
+    %% ux_string:to_nfd([4019,3969,63]).                
+    %% [4019,3953,3968,63]
+    Bin = unicode:characters_to_binary([4019,3969,63]),
+    S1 = ?M:new(Bin),
+    {{Char1, _Class1}, S2} = ?M:head(S1),
+    {{Char2, _Class2}, S3} = ?M:head(S2),
+    {{Char3, _Class3}, S4} = ?M:head(S3),
+    {{Char4, _Class4}, S5} = ?M:head(S4),
+    Stop = ?M:head(S5),
+    [?_assertEqual(Char1, 4019) % 0
+    ,?_assertEqual(Char2, 3953) % 129
+    ,?_assertEqual(Char3, 3968) % 130
+    ,?_assertEqual(Char4, 63)   % 0
+    ,?_assertEqual(Stop, stop)
+    ].
 
 
 error14_test_() ->

@@ -1,5 +1,5 @@
-% Defines Hangul constants
-% Hangul characters can be decompize to LV or LVT forms.
+%% Defines Hangul constants
+%% Hangul characters can be decompize to LV or LVT forms.
 
 -define(HANGUL_SBASE,  16#AC00).
 -define(HANGUL_LBASE,  16#1100). % 4352 - 4371
@@ -11,10 +11,10 @@
 -define(HANGUL_NCOUNT, 588).
 -define(HANGUL_SCOUNT, 11172).
 
--define(HANGUL_SLAST,  ?HANGUL_SBASE + ?HANGUL_SCOUNT).
--define(HANGUL_LLAST,  ?HANGUL_LBASE + ?HANGUL_LCOUNT).
--define(HANGUL_VLAST,  ?HANGUL_VBASE + ?HANGUL_VCOUNT).
--define(HANGUL_TLAST,  ?HANGUL_TBASE + ?HANGUL_TCOUNT).
+-define(HANGUL_SLAST,  (?HANGUL_SBASE + ?HANGUL_SCOUNT)).
+-define(HANGUL_LLAST,  (?HANGUL_LBASE + ?HANGUL_LCOUNT)).
+-define(HANGUL_VLAST,  (?HANGUL_VBASE + ?HANGUL_VCOUNT)).
+-define(HANGUL_TLAST,  (?HANGUL_TBASE + ?HANGUL_TCOUNT)).
 
 
 -define(CHAR_IS_HANGUL_L(Ch), (
@@ -30,19 +30,23 @@
 )).
 
 
+%% 12578
+%% {element,{non_variable,12782,32,2,65535}}
 
 
 % Hangul & UCA
 -define(COL_HANGUL_LBASE,  12337). % 12337 - 12356
 -define(COL_HANGUL_VBASE,  12463). % 12463 - 12484
--define(COL_HANGUL_TBASE,  12533). % 12533 - 12584
+-define(COL_HANGUL_TBASE,  12533). % 12533 - 12561      12584
 
--define(COL_HANGUL_LLAST,  ?COL_HANGUL_LBASE + ?HANGUL_LCOUNT).
--define(COL_HANGUL_VLAST,  ?COL_HANGUL_VBASE + ?HANGUL_VCOUNT).
--define(COL_HANGUL_TLAST,  ?COL_HANGUL_TBASE + ?HANGUL_TCOUNT).
+-define(COL_HANGUL_LLAST,  (?COL_HANGUL_LBASE + ?HANGUL_LCOUNT)).
+-define(COL_HANGUL_VLAST,  (?COL_HANGUL_VBASE + ?HANGUL_VCOUNT)).
+-define(COL_HANGUL_TLAST,  (?COL_HANGUL_TBASE + ?HANGUL_TCOUNT)).
 
-% TERMINATOR < T <  V < L
--define(COL_HANGUL_TERMINATOR, 16#24C9). % 12337 - 68 
+% TERMINATOR > T >  V > L
+%-define(COL_HANGUL_TERMINATOR, 16#24C9). % Code Paint
+-define(COL_HANGUL_TERMINATOR, 6089). % Code Paint
+% {element,{non_variable,6089,32,12,65535}}
 
 % Weight on level 1 (L1) is L1 of Hangul jamo L.
 -define(IS_L1_OF_HANGUL_L(W), (

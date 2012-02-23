@@ -1,8 +1,12 @@
 -module(ucol).
--export([compare/2, private_compare/2]).
--define(RES(X), {X, ?LINE}).
--define(VAL(X), erlang:element(1, X)).
--define(DVAL(X), begin io:write(user, X), erlang:element(1, X) end).
+-export([compare/2]).
+-define(RES(X), X).
+-define(VAL(X), X).
+
+%% For debugging
+%-define(RES(X), {X, ?LINE}).
+%-define(VAL(X), erlang:element(1, X)).
+%-define(DVAL(X), begin io:write(user, X), erlang:element(1, X) end).
 
 
 %% @doc Variable collation elements are reset to zero at levels one through
@@ -16,17 +20,96 @@
 %% * A combining grave accent after a Capital A would be unchanged.'''
 %% @end
 
-private_compare(S1, S2) ->
-    B1 = unicode:characters_to_binary(S1),
-    B2 = unicode:characters_to_binary(S2),
-    compare(B1,B2).
-
 -spec compare(binary(), binary()) -> equal | less | greater.
 
+-define(IS_SIMPLE_UPPER_CHAR(X), ($A =< (X) andalso (X) =< $Z)).
+-define(IS_SIMPLE_LOWER_CHAR(X), ($a =< (X) andalso (X) =< $z)).
+-define(IS_SIMPLE_NUMBER_CHAR(X), ($0 =< (X) andalso (X) =< $9)).
+-define(CHAR_TYPE(X), (if
+        (X) > 122 -> unicode;
+        ?IS_SIMPLE_UPPER_CHAR(X) -> upper;
+        ?IS_SIMPLE_LOWER_CHAR(X) -> lower;
+        ?IS_SIMPLE_NUMBER_CHAR(X) -> number;
+        true -> unicode 
+    end)).
+
+%% Number < Lower < Upper
+
+-define(CHAR_GAP, 32). % $a - $A
+
+compare(S, S) -> equal;
+
 compare(S1, S2) ->
+    simple_compare(S1, S2, equal).
+
+
+simple_compare(<<Point1/utf8, Rem1/binary>> = S1, 
+        <<Point2/utf8, Rem2/binary>> = S2, L3) ->
+    Type1 = ?CHAR_TYPE(Point1),
+
+    if Type1 =/= unicode ->
+        Type2 = ?CHAR_TYPE(Point2),
+
+        if Type2 =/= unicode ->
+            if Point1 =:= Point2 -> 
+                simple_compare(Rem1, Rem2, L3);
+
+                Type1 =:= Type2 -> 
+                    if Point1 < Point2 -> ?RES(less); true -> ?RES(greater) end;
+
+                Type1 =:= lower, Type2 =:= upper ->
+                    P1 = Point1 - 32,
+                    if 
+                        P1 < Point2 -> ?RES(less); 
+                        P1 > Point2 -> ?RES(greater);
+                        L3 =/= equal -> simple_compare(Rem1, Rem2, L3);
+                        true -> simple_compare(Rem1, Rem2, ?RES(less))
+                    end;
+
+                Type2 =:= lower, Type1 =:= upper ->
+                    P1 = Point1 + 32,
+                    if 
+                        P1 < Point2 -> ?RES(less); 
+                        P1 > Point2 -> ?RES(greater);
+                        L3 =/= equal -> simple_compare(Rem1, Rem2, L3);
+                        true -> simple_compare(Rem1, Rem2, ?RES(greater))
+                    end;
+
+                Type1 =:= number -> ?RES(less);
+                true  -> ?RES(greater) %% Type2 =:= number
+            end;
+                
+            true -> uca_compare(S1, S2, L3)
+        end;
+
+        true -> uca_compare(S1, S2, L3)
+    end;
+
+simple_compare(<<>>, <<>>, L3) -> L3;
+simple_compare(S1, S2, L3) -> uca_compare(S1, S2, ?VAL(L3)).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+uca_compare(S1, S2) -> uca_compare(S1, S2, equal).
+
+%% CS = true, case sensitive
+%% CS = false, case insensitive
+uca_compare(S1, S2, L3) ->
     US1 = ucol_string:new(S1),
     US2 = ucol_string:new(S2),
-    W1 = ucol_weights:new(),
+    W1 = ucol_weights:new(L3),
     compare_(US1, US2, W1, non_variable, non_variable).
 
 
@@ -40,7 +123,7 @@ compare_(US1, US2, W1, T1, T2) ->
     {{ok, E1, NewUS1}, stop} ->  compare_left_remain_(NewUS1, E1, W1);
     %% `{ok, WeightElement, NewUcolString}'
     {{ok, E1, NewUS1}, {ok, E2, NewUS2}} ->
-%              io:format(user, "~n ~w ~n ~w ~n \t ~w ~n", [E1, E2, W1]),
+%       io:format(user, "E1: ~w ~nE2: ~w~n", [E1, E2]),
         case ucol_weights:compare(E1, E2, W1) of
             less -> ?RES(less);
             greater -> ?RES(greater);
@@ -48,15 +131,13 @@ compare_(US1, US2, W1, T1, T2) ->
             W2 ->
                 NewT1 = ucol_weights:type(E1), 
                 NewT2 = ucol_weights:type(E2), 
-%               io:format(user, "~n ~w ~n ~w ~n \t ~w ~n", [R1,R2, W2]),
                 compare_(NewUS1, NewUS2, W2, NewT1, NewT2)
         end
     end.
 
 
 compare_right_remain_(US2, E2, W1) ->
-    E1 = ucol_weights:empty(),
-    case ucol_weights:compare(E1, E2, W1) of
+    case ucol_weights:compare_right_remain(E2, W1) of
         less -> ?RES(less);
         greater -> ?RES(greater);
         equal -> ?RES(equal);
@@ -72,8 +153,7 @@ compare_right_remain_(US2, E2, W1) ->
 
 
 compare_left_remain_(US1, E1, W1) ->
-    E2 = ucol_weights:empty(),
-    case ucol_weights:compare(E1, E2, W1) of
+    case ucol_weights:compare_left_remain(E1, W1) of
         less -> ?RES(less);
         greater -> ?RES(greater);
         equal -> ?RES(equal);
@@ -88,16 +168,17 @@ compare_left_remain_(US1, E1, W1) ->
     end.
 
 
+
+%% Returns a ducet array.
+%% The default value is non_variable.
 ducet(variable) ->
     ucol_unidata:var_ducet();
-% def
+
 ducet(non_variable) ->
     ucol_unidata:ducet().
 
-%%ccc(Point) -> ucol_map:get(Point, ucol_unidata:ccc()).
 
-
-
+%% Produce a longest match of code points in a ducet table.
 extract(Str1, Arr, LastSkippedClass, LastClass) ->
     IsFirst = LastClass =:= false,
     case ucol_string:head(Str1) of
@@ -116,10 +197,6 @@ extract(Str1, Arr, LastSkippedClass, LastClass) ->
             andalso LastClass =< Class 
             andalso Class =/= 0,
 
-%       io:format(user, "Point: ~w (~w), Last: ~w, Skipped: ~w ~n"
-%           "\tCanSkipped: ~w, IsStoped: ~w, IsBlocked: ~w ~n", 
-%           [Point, Class, LastClass, LastSkippedClass, 
-%            CanSkipped, IsStopped, IsBlocked]),
 
         if IsStopped; IsBlocked ->
             handle_stopped(ucol_string:back(Str2), Arr);
@@ -174,15 +251,15 @@ handle_stopped(Str1, Arr) ->
             extract(Str2, ducet(Type), false, false) end.
 
 
+%% It is a special case, when there are a ducet weight for one and three 
+%% elements, but there is no a value for two elements.
 handle_no_more(Str1) ->
-%   io:format(user, "NO_MORE: ~w ~n", [Str1]),
     Str2 = ucol_string:back_and_skip(Str1),
     Buf = ucol_string:head_buffer(Str2),
     Arr = extract_again(Buf, ducet(non_variable)),
     LastSkippedClass = ucol_string:last_skipped_class(Str2),
     LastClass = ucol_string:last_class(Str2),
     extract(Str2, Arr, LastSkippedClass, LastClass).
-
 
 
 extract_again([{H,_Class}|T], Arr) -> 
@@ -242,14 +319,48 @@ conformance_test_() ->
 %% ..each line in the file will order as being greater than or equal 
 %% to the previous one...
 test_conformance([H|T], Prev, ErrCnt) when is_binary(H) ->
-    Success = case ?VAL(?M:compare(Prev, H)) of
+    Success1 = case ?VAL(?M:compare(Prev, H)) of
         greater ->
-            io:format(user, "Error: ~w > ~w~n", 
+            io:format(user, "Error case 1: ~w > ~w~n", 
                 [unicode:characters_to_list(Prev), 
                  unicode:characters_to_list(H)]),
             false;
-        X when X =:= less; X =:= equal -> true
+        less  -> true; 
+        equal -> true
     end,
+
+    Success2 = case ?VAL(?M:compare(H, Prev)) of
+        less ->
+            io:format(user, "Error case 2: ~w > ~w ~n", 
+                [unicode:characters_to_list(Prev), 
+                 unicode:characters_to_list(H)]),
+            false;
+        greater -> true; 
+        equal   -> true
+    end,
+
+    Success3 = case ?VAL(uca_compare(Prev, H)) of
+        greater ->
+            io:format(user, "Error case 3: ~w > ~w ~n", 
+                [unicode:characters_to_list(Prev), 
+                 unicode:characters_to_list(H)]),
+            false;
+        less  -> true; 
+        equal -> true
+    end,
+
+    Success4 = case ?VAL(uca_compare(H, Prev)) of
+        less ->
+            io:format(user, "Error case 4: ~w > ~w ~n", 
+                [unicode:characters_to_list(Prev), 
+                 unicode:characters_to_list(H)]),
+            false;
+        greater -> true; 
+        equal   -> true
+    end,
+
+    Success = Success1 and Success2,
+
     test_conformance(T, H, ErrCnt + boolean_to_integer(not Success));
 
 test_conformance([], Prev, ErrCnt) -> ?assertEqual(ErrCnt, 0).
@@ -427,6 +538,20 @@ error11_test_() ->
 
 
 %% Error: [12910,98] > [44032,4449,33]
+%%        [12910,98] > [4352,4449,4449,33]
+
+%% ucol_array:get(12910, ucol_unidata:ducet()).
+%% {element,{non_variable,{hangul_l,[12337 (L), 12463 (V), TERMINATOR]},
+%%                     "  ",
+%%                     [6,6],
+%%                     [65535,65535]}}
+
+%% [ucol_array:get(X, ucol_unidata:ducet()) || X <- [4352,4449,4449]]. 
+%% [{element,{non_variable,{hangul_l,[12337]},32,2,65535}},
+%%  {element,{non_variable,12463,32,2,65535}},
+%%  {element,{non_variable,12463,32,2,65535}}]
+
+
 error12_test_() ->
     S1 = unicode:characters_to_binary([12910,98]),
     S2 = unicode:characters_to_binary([44032,4449,33]),
@@ -455,11 +580,68 @@ error13_test_() ->
 
  
 %% Error: [3780,1,3805,97] > [3780,1425,3805,97]
-%%        [   0,0,   0, 0]   [   0, 220,   0, 0]
+%% CCC:   [   0,0,   0, 0]   [   0, 220,   0, 0]
 error14_test_() ->
     S1 = unicode:characters_to_binary([3780,1,3805,97]),
     S2 = unicode:characters_to_binary([3780,1425,3805,97]),
     [?_assertEqual(?VAL(?M:compare(S1, S2)), equal) 
     ].
+
+
+
+%% [ucol_weights:hangul_point(X) || X <- [4370,4469,4469,98]]. 
+%% [[l],v,v,x]
+
+%% Error case 1: [55176,4469,98] > [55198,33]
+%% [4370,4469,4469,98] [4370,4469,4541,33]
+
+
+%%  [ucol_array:get(X, ucol_unidata:ducet()) || X <- [4370,4469,4469,98]].
+%%  {element,{non_variable,{hangul_l,[12355]},32,2,65535}},
+%%  {element,{non_variable,12483,32,2,65535}},
+%%  {element,{non_variable,12483,32,2,65535}},
+%%  {element,{non_variable,5561,32,2,65535}}]
+%%  [ucol_array:get(X, ucol_unidata:ducet()) || X <- [4370,4469,4541,33]].
+%%  {element,{non_variable,{hangul_l,[12355]},32,2,65535}},
+%%  {element,{non_variable,12483,32,2,65535}},
+%%  {element,{non_variable,12578,32,2,65535}},
+%%  {element,{variable,[],[],[],635}}]
+
+%% (ucol@omicron)6> [ucol_weights:hangul_point(X) || X <- [4370,4469,4469,98]].
+%% [[l],v,v,x]
+%% (ucol@omicron)7> [ucol_weights:hangul_point(X) || X <- [4370,4469,4541,33]].
+%% [[l],v,x,x]
+%% 4541 11BD;HANGUL JONGSEONG CIEUC;Lo;0;L;;;;;N;;;;;
+
+error15_test_() ->
+    S1 = unicode:characters_to_binary([55176,4469,98]),
+    S2 = unicode:characters_to_binary([55198,33]),
+    S3 = unicode:characters_to_binary([4370,4469,4469,98]),
+    S4 = unicode:characters_to_binary([4370,4469,4541,33]),
+    [?_assertEqual(?VAL(?M:compare(S1, S2)), less) 
+%   ,?_assertEqual(?VAL(?M:compare(S3, S4)), less) 
+    ].
+
+
+
+%% E1: {non_variable,{hangul_l,[12355]},32,2,65535} 
+%% E2: {non_variable,{hangul_l,[12355]},32,2,65535}
+%% E1: {non_variable,12483,32,2,65535} 
+%% E2: {non_variable,12483,32,2,65535}
+%% E1: {non_variable,12483,32,2,65535} 
+%% E2: {non_variable,12578,32,2,65535}
+
+%% [ucol_weights:hangul_type(X) || X <- [12355, 12483, 12578]].
+%% [l,v,x]
+
+%% (ucol@omicron)10> ucol_array:get(4541, ucol_unidata:ducet()).
+%% {element,{non_variable,12578,32,2,65535}}
+
+%hangul_t_test_() ->
+%    [?_assertEqual(ucol_weights:hangul_point(4541), t)].
+
+%% Error case 1: [4370,4469,98] > [55176,4449,33]
+
+
 
 -endif.
