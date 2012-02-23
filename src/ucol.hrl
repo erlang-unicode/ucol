@@ -82,7 +82,7 @@
     ((Ch >= 16#3400)  and (Ch =< 16#4DB5))
 
 % [20940] CJK UNIFIED IDEOGRAPH-4E00..9FCB
-or ((Ch >= 16#4E00)  and (Ch =< 16#9FCB))
+or ((Ch >= 16#4E00)  and (Ch =< 16#9FCC))
 % FIXED: Error: [55296,33] lower [40908,98]
 % CJK Unified Ideographs
 %or ((Ch >= 16#4E00)  and (Ch =< 16#9FFF)) 

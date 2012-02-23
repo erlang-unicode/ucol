@@ -274,6 +274,9 @@ extract_again([], Arr) -> Arr.
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -define(M, ucol).
+-define(CASES, true).
+
+-ifdef(CASES).
 
 extract_components_test_() ->
     S1 = ucol_string:new(<<"test">>),
@@ -619,28 +622,29 @@ error15_test_() ->
     S3 = unicode:characters_to_binary([4370,4469,4469,98]),
     S4 = unicode:characters_to_binary([4370,4469,4541,33]),
     [?_assertEqual(?VAL(?M:compare(S1, S2)), less) 
-%   ,?_assertEqual(?VAL(?M:compare(S3, S4)), less) 
+    ,?_assertEqual(?VAL(?M:compare(S3, S4)), less) 
     ].
 
+-endif.
 
 
-%% E1: {non_variable,{hangul_l,[12355]},32,2,65535} 
-%% E2: {non_variable,{hangul_l,[12355]},32,2,65535}
-%% E1: {non_variable,12483,32,2,65535} 
-%% E2: {non_variable,12483,32,2,65535}
-%% E1: {non_variable,12483,32,2,65535} 
-%% E2: {non_variable,12578,32,2,65535}
+%% UNICODE 6.1
 
-%% [ucol_weights:hangul_type(X) || X <- [12355, 12483, 12578]].
-%% [l,v,x]
 
-%% (ucol@omicron)10> ucol_array:get(4541, ucol_unidata:ducet()).
-%% {element,{non_variable,12578,32,2,65535}}
+%% Error case 1: [40908,98] > [64014,33]
+%% 
+%% 9FCC (40908) ; syntatic from the block 'CJK Unified Ideographs'
+%% FA0E (64014) ; [.FB41.0020.0002.FA0E][.FA0E.0000.0000.FA0E] 
+%%      # CJK COMPATIBILITY IDEOGRAPH-FA0E
 
-%hangul_t_test_() ->
-%    [?_assertEqual(ucol_weights:hangul_point(4541), t)].
+%% E1: {non_variable,[64449,40908],32,2,[]} 
+%% E2: {non_variable,[64321,64014],32,2,[65535,65535]}
 
-%% Error case 1: [4370,4469,98] > [55176,4449,33]
+error16_test_() ->
+    S1 = unicode:characters_to_binary([40908,98]),
+    S2 = unicode:characters_to_binary([64014,33]),
+    [?_assertEqual(?VAL(?M:compare(S1, S2)), less) 
+    ].
 
 
 
