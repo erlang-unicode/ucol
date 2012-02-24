@@ -212,7 +212,7 @@ extract(Str1, Arr, LastSkippedClass, LastClass) ->
 
                     %% Make an implicit weight
                     none when IsFirst -> 
-                        {ok, ucol_weights:implicit(Point), 
+                        {ok, ucol_implicit:synthesize(Point), 
                             ucol_string:fix(Str2)};
 
                     %% Skip a char

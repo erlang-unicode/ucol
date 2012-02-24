@@ -19,8 +19,6 @@
 -export([hangul_type/1,
         hangul_point/1]).
 
--export([implicit/1]).
-
 
 -define(M, ?MODULE).
 
@@ -483,51 +481,6 @@ shifted2([], Acc) ->
 
 set_l4_to_value({_Variable, L1, L2, L3, _L4}, Val) ->
     {L1, L2, L3, Val}.
-
-
-
-
-% Table 18. Values for Base
-% -----------------------------------------------------------------------------
-% Range 1: Unified_Ideograph=True AND
-% ((Block=CJK_Unified_Ideograph) OR (Block=CJK_Compatibility_Ideographs))
-% Base  1: FB40
-% Range 2: Unified_Ideograph=True AND NOT
-% ((Block=CJK_Unified_Ideograph) OR (Block=CJK_Compatibility_Ideographs))
-% Base  2: FB80
-% Base  3: FBC0 Any other code point
-% Range 3: Ideographic AND NOT Unified_Ideograph
-% -----------------------------------------------------------------------------
-implicit(H)
-    when ?CHAR_IS_UNIFIED_IDEOGRAPH(H)
-     and (?CHAR_IS_CJK_COMPATIBILITY_IDEOGRAPH(H)
-       or ?CHAR_IS_CJK_UNIFIED_IDEOGRAPH(H)) ->
-    do_implicit_weight(H, 16#FB40);
-
-implicit(H)
-    when ?CHAR_IS_UNIFIED_IDEOGRAPH(H)
-      and (not (?CHAR_IS_CJK_COMPATIBILITY_IDEOGRAPH(H)
-             or ?CHAR_IS_CJK_UNIFIED_IDEOGRAPH(H))) ->
-    do_implicit_weight(H, 16#FB80);
-
-implicit(H) ->
-    do_implicit_weight(H, 16#FBC0).
-
-
-
-
-%% @doc 7.1.3 Implicit Weights 
-%% The result of this process consists of collation elements that are sorted in
-%% code point order, that do not collide with any explicit values in the table,
-%% and that can be placed anywhere (for example, at BASE) with respect to the 
-%% explicit collation element mappings. By default, implicit mappings are given
-%% higher weights than all explicit collation elements.
-%% @end
-%% @private
-do_implicit_weight(CP, BASE) when is_integer(CP), is_integer(BASE) ->
-    AAAA = BASE + (CP bsr 15),
-    BBBB = (CP band 16#7FFF) bor 16#8000,
-    {non_variable, [AAAA, BBBB], 32, 2, []}.
 
 
 
