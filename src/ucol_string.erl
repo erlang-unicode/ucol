@@ -88,6 +88,7 @@ ccc(Point) -> ucol_map:get(Point, ucol_unidata:ccc()).
 %% Return [{char(), ccc()}].
 decomp(Point) -> array:get(Point, ucol_unidata:decomp()).
 
+
 %% Hangul decompose
 normalize(<<Point/utf8, Rem/binary>>, _LastClass, List) 
     when (Point >= ?HANGUL_SBASE) and (Point =< ?HANGUL_SLAST) ->
@@ -116,9 +117,10 @@ normalize(<<Point/utf8, Rem/binary>>, LastClass, List) ->
     Class = ccc(Point),
     H = {Point, Class},
     if
-    Class =:= 0             -> {lists:reverse([H|List]), Rem};
-    Class =:= ?DECOMP_CLASS -> decompose(decomp(Point), LastClass, List, Rem);
-    LastClass =< Class      -> normalize(Rem, Class, [H|List]);
+    Class =:= 0, List =:= [] -> {[H], Rem}; % Maybe deleted
+    Class =:= 0              -> {lists:reverse([H|List]), Rem};
+    Class =:= ?DECOMP_CLASS  -> decompose(decomp(Point), LastClass, List, Rem);
+    LastClass =< Class       -> normalize(Rem, Class, [H|List]);
     % not in nf LastClass > Class
     true -> normalize(Rem, LastClass, proper_insert(H, List, []))
     end;

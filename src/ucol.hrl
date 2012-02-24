@@ -72,6 +72,7 @@
 -define(CHAR_IS_CJK_UNIFIED_IDEOGRAPH(Ch), (
     (Ch >= 16#4E00) and (Ch =< 16#9FFF) % CJK Unified Ideographs
 )).
+
 -define(CHAR_IS_CJK_COMPATIBILITY_IDEOGRAPH(Ch), (
     (Ch >= 16#F900) and (Ch =< 16#FAFF) % CJK Compatibility Ideographs
 )).
@@ -82,21 +83,20 @@
     ((Ch >= 16#3400)  and (Ch =< 16#4DB5))
 
 % [20940] CJK UNIFIED IDEOGRAPH-4E00..9FCB
-or ((Ch >= 16#4E00)  and (Ch =< 16#9FCC))
-% FIXED: Error: [55296,33] lower [40908,98]
+ or ((Ch >= 16#4E00)  and (Ch =< 16#9FCC))
 % CJK Unified Ideographs
 %or ((Ch >= 16#4E00)  and (Ch =< 16#9FFF)) 
 
 % [2] CJK COMPATIBILITY IDEOGRAPH-FA0E..FA0F
  or ((Ch >= 16#FA0E)  and (Ch =< 16#FA0F))
 
- or ((Ch == 16#FA11)                     ) % CJK COMPATIBILITY IDEOGRAPH-FA11
+ or (Ch == 16#FA11) % CJK COMPATIBILITY IDEOGRAPH-FA11
 
 % [2] CJK COMPATIBILITY IDEOGRAPH-FA13..FA14
  or ((Ch >= 16#FA13)  and (Ch =< 16#FA14))
 
- or ((Ch == 16#FA1F)                     ) % CJK COMPATIBILITY IDEOGRAPH-FA1F
- or ((Ch == 16#FA21)                     ) % CJK COMPATIBILITY IDEOGRAPH-FA21
+ or (Ch == 16#FA1F) % CJK COMPATIBILITY IDEOGRAPH-FA1F
+ or (Ch == 16#FA21) % CJK COMPATIBILITY IDEOGRAPH-FA21
 
 % [2] CJK COMPATIBILITY IDEOGRAPH-FA23..FA24
  or ((Ch >= 16#FA23)  and (Ch =< 16#FA24))
@@ -113,20 +113,6 @@ or ((Ch >= 16#4E00)  and (Ch =< 16#9FCC))
 % [222] CJK UNIFIED IDEOGRAPH-2B740..2B81D 
  or ((Ch >= 16#2B740) and (Ch =< 16#2B81D))
 )).
-
-
--define(CHAR_IS_HANGUL(Char), 
-    Char>=16#1100, Char=<16#11FF % Hangul Jamo 
-  ; Char>=16#A960, Char=<16#A97C % Hangul Jamo Extended-A
-  ; Char>=16#D7B0, Char=<16#D7C6 % Hangul Jamo Extended-B
-  ; Char>=16#D7CB, Char=<16#D7FB % Hangul Jamo Extended-B
-  ; Char>=16#3131, Char=<16#318E % Hangul Compatibility Jamo 
-  ; Char==17#302E; Char==16#302F % Tone marks (used in Middle Korean) 
-  ; Char>=16#AC00, Char=<16#D7A3 % 11,172 precomposed Hangul syllables
-  ; Char>=16#3200, Char=<16#321E % For parenthesised 
-  ; Char>=16#3260, Char=<16#327E % and circled 
-  ; Char>=16#FFDC, Char=<16#FFA0 % For halfwidth 
-).
 
 
 -define(DECOMP_CLASS, 100).
