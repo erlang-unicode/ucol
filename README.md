@@ -28,5 +28,12 @@ Where is `ucol\_unidata`?
 `ucol\_unidata` and `ucol\_testdata` modules. These files can be copied into the
 ebin directory. 
 
-The feature is that this application do not need `ucol\_unidata` and `ux` in runtime :)
+The feature is that this application do not need `ucol\_data` and `ux` in runtime :)
 
+
+Tips
+----
+
+* Turn off the `native` option in rebar.config file when debugging.
+* Turn on the `native` option when release. 
+* The application don't need `ucol\_testdata` in runtime.

@@ -1,62 +1,75 @@
 -module(ucol_array).
 -export([new/0, set/3, get/2, fix/1]).
 
+-record(ucol_array, {
+    array = array:new(),
+    max = 0
+}).
+
+new() -> #ucol_array{}.
 
 
-new() -> array:new().
+fix(UArr=#ucol_array{array=Arr}) ->  
+    UArr#ucol_array{
+        array=array:fix(array:map(fun fix_elem/2, Arr))
+    }.
 
 
-fix(Arr) ->  
-    array:fix(array:map(fun fix_elem/2, Arr)).
-
-
-fix_elem(_Idx, Elem) -> 
-    case array:is_array(Elem) of
-        true -> fix(Elem);
-        false -> Elem
-    end.
+fix_elem(_Idx, Arr=#ucol_array{}) -> fix(Arr);
+fix_elem(_Idx, Elem) -> Elem.
 
 
 set([H|T] = _CPList, Weights, Arr)
     when is_integer(H) ->
-    Old = array:get(H, Arr),
+    Old = get_(H, Arr),
     New = case {T, type(Old)} of
         %% H is a first element
         {[], none}    -> Weights;
         %% Already have an array.
-        {[], array}   -> array:set(0, Weights, Old);
+        {[], array}   -> set_(0, Weights, Old);
         {[], X} when X =:= element; X =:= empty -> 
             Old; % a root element is already added
-        {_,  none}    -> set(T, Weights, new());
+        {_,  none}    -> set(T, Weights, #ucol_array{});
         {_,  array}   -> set(T, Weights, Old);
         %% Old is a root (0) element
         {_, X} when X =:= element; X =:= empty -> 
-            set(T, Weights, array:set(0, Old, new()))
+            set(T, Weights, set_(0, Old, #ucol_array{}))
     end,
-    array:set(H, New, Arr).
-    
+    set_(H, New, Arr).
 
-get(CP, Arr)
+
+get_(Point, #ucol_array{array=Arr})
+    when is_integer(Point) ->
+    array:get(Point, Arr).
+
+
+set_(Point, Weights, Old=#ucol_array{array=OldArr, max=OldMax}) 
+    when is_integer(Point) ->
+    Old#ucol_array{
+        array=array:set(Point, Weights, OldArr),
+        max=max(OldMax, Point)
+    }.
+
+
+get(CP, #ucol_array{max=Max}) 
+    when CP > Max -> none;
+
+get(CP, #ucol_array{array=Arr})
     when is_integer(CP) ->
     case array:get(CP, Arr) of
         undefined -> none; % not in array
         variable -> {empty, variable}; % for ucol
         non_variable -> {empty, non_variable}; 
         empty -> empty; % for ucol_primary
-        Val ->
-            case array:is_array(Val) of
-                false -> {element, Val};
-                true  -> {array, Val} 
-            end
+        Val=#ucol_array{} -> {array, Val};
+        Val -> {element, Val}
     end.
 
 type(undefined) -> none;
 type(variable) -> empty;
 type(non_variable) -> empty;
-type(Val) -> 
-    case array:is_array(Val) of 
-        true -> array; 
-        false -> element end.
+type(#ucol_array{}) -> array;
+type(_) -> element.
 
 
 -ifdef(TEST).
@@ -65,7 +78,7 @@ type(Val) ->
 
 type_test_() ->
     [?_assertEqual(type(undefined), none)
-    ,?_assertEqual(type(array:new()), array)
+    ,?_assertEqual(type(ucol_array:new()), array)
     ,?_assertEqual(type(1), element)
     ].
 
@@ -76,8 +89,9 @@ set_and_get_test_() ->
     A3 = ?M:set([4,5,1], 2, A2),
     A4 = ?M:set([4], 5, A3),
     A5 = ?M:set([4,6,1], 5, A4),
+    AF = ?M:fix(A5),
 
-    {T1, V1} = ?M:get(4, A5),
+    {T1, V1} = ?M:get(4, AF),
     {T2, V2} = ?M:get(6, V1),
     {T3, V3} = ?M:get(1, V2),
 

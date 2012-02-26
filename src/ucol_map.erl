@@ -8,23 +8,25 @@
     array :: array(),
     min :: non_neg_integer(),
     max :: non_neg_integer(),
+    separator :: non_neg_integer(),
     default :: map_value()
 }).
 
 from_list(List) ->
-    NaiveMax = 10000,
+    NaiveSep = 10000,
     Def = 0,
     [{Min, _}|_] = SortedList = lists:sort(List),
+    [{Max, _}|_] = lists:reverse(SortedList),
     Last = 0,
     %% Rem is from (16#FFFF+1) to max.
-    {BinMap, Rem, Max} = get_binary_map(
-        Min, NaiveMax+1, Def, Last, SortedList, <<>>),
-    TrimmedBinMap = trim_binary(Max-Min+1, BinMap),
+    {BinMap, Rem, Sep} = get_binary_map(
+        Min, NaiveSep+1, Def, Last, SortedList, <<>>),
+    TrimmedBinMap = trim_binary(Sep-Min+1, BinMap),
+
     #ucol_map{
         binary=TrimmedBinMap, 
         array=array:fix(array:from_orddict(orddict:from_list(Rem))),
-        max=Max, min=Min,
-        default=Def
+        max=Max, separator=Sep, min=Min, default=Def
     }.
 
 
@@ -35,10 +37,11 @@ trim_binary(Len, Bin) ->
     
 
 -spec get(non_neg_integer(), #ucol_map{}) -> map_value().
-get(X, #ucol_map{default=Def, min=Min}) when X < Min ->
+get(X, #ucol_map{default=Def, min=Min, max=Max}) when X < Min; X > Max ->
     Def;
-get(X, #ucol_map{binary=BinMap, max=Max, min=Min}) 
-    when is_integer(X), X =< Max ->
+
+get(X, #ucol_map{binary=BinMap, separator=Sep, min=Min}) 
+    when X =< Sep ->
     Skip = (X-Min)*8,
     <<_:Skip, Res, _/binary>> = BinMap,
     Res;
