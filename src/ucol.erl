@@ -1,7 +1,20 @@
 -module(ucol).
 -export([compare/2]).
+
 -define(RES(X), X).
 -define(VAL(X), X).
+
+-define(HANDLE_OTHER(Str, Other),
+    begin
+        {empty, Type} = Other,
+        extract(ucol_string:fix(Str), ducet(Type), false, false)
+    end).
+
+-define(NEXT_ARRAY(Elem, PrevArr), ducet(ucol_weights:type(Elem))).
+-define(WEIGHTS_MODULE, ucol_weights).
+
+-include("ucol.hrl").
+-include("ucol_base.hrl").
 
 %% For debugging
 %-define(RES(X), {X, ?LINE}).
@@ -9,33 +22,12 @@
 %-define(DVAL(X), begin io:write(user, X), erlang:element(1, X) end).
 
 
-%% @doc Variable collation elements are reset to zero at levels one through
-%% three. In addition, a new fourth-level weight is appended, whose value 
-%% depends on the type, as shown in Table 12.
-%% Any subsequent primary or secondary ignorables following a variable are reset
-%% so that their weights at levels one through four are zero.
-%% ```
-%% * A combining grave accent after a space would have the value 
-%%   [.0000.0000.0000.0000].
-%% * A combining grave accent after a Capital A would be unchanged.'''
-%% @end
+
+%%
+%% API
+%%
 
 -spec compare(binary(), binary()) -> equal | less | greater.
-
--define(IS_SIMPLE_UPPER_CHAR(X), ($A =< (X) andalso (X) =< $Z)).
--define(IS_SIMPLE_LOWER_CHAR(X), ($a =< (X) andalso (X) =< $z)).
--define(IS_SIMPLE_NUMBER_CHAR(X), ($0 =< (X) andalso (X) =< $9)).
--define(CHAR_TYPE(X), (if
-        (X) > 122 -> unicode;
-        ?IS_SIMPLE_UPPER_CHAR(X) -> upper;
-        ?IS_SIMPLE_LOWER_CHAR(X) -> lower;
-        ?IS_SIMPLE_NUMBER_CHAR(X) -> number;
-        true -> unicode 
-    end)).
-
-%% Number < Lower < Upper
-
--define(CHAR_GAP, 32). % $a - $A
 
 compare(S, S) -> equal;
 
@@ -43,8 +35,44 @@ compare(S1, S2) ->
     simple_compare(S1, S2, equal).
 
 
+%%
+%% Ovarloaded
+%%
+
+implicit(Point) ->
+    ucol_implicit:synthesize(Point).
+
+
+%% Returns a ducet array.
+%% The default value is non_variable.
+ducet(variable) ->
+    ucol_unidata:var_ducet();
+
+ducet(non_variable) ->
+    ucol_unidata:ducet().
+
+ducet() ->
+    ucol_unidata:ducet().
+
+
+
+%%
+%% Helpers
+%%
+
+uca_compare(S1, S2) -> uca_compare(S1, S2, equal).
+
+
+uca_compare(S1, S2, L3) ->
+    US1 = ucol_string:new(S1),
+    US2 = ucol_string:new(S2),
+    W1 = ucol_weights:new(L3),
+    Arr = ducet(),
+    compare_(US1, US2, W1, Arr, Arr).
+
+
 simple_compare(<<Point1/utf8, Rem1/binary>> = S1, 
-        <<Point2/utf8, Rem2/binary>> = S2, L3) ->
+               <<Point2/utf8, Rem2/binary>> = S2, L3) ->
     Type1 = ?CHAR_TYPE(Point1),
 
     if Type1 =/= unicode ->
@@ -89,184 +117,6 @@ simple_compare(<<>>, <<>>, L3) -> L3;
 simple_compare(S1, S2, L3) -> uca_compare(S1, S2, ?VAL(L3)).
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-uca_compare(S1, S2) -> uca_compare(S1, S2, equal).
-
-%% CS = true, case sensitive
-%% CS = false, case insensitive
-uca_compare(S1, S2, L3) ->
-    US1 = ucol_string:new(S1),
-    US2 = ucol_string:new(S2),
-    W1 = ucol_weights:new(L3),
-    compare_(US1, US2, W1, non_variable, non_variable).
-
-
-compare_(US1, US2, W1, T1, T2) ->
-    R1 = extract(US1, ducet(T1), false, false),
-    R2 = extract(US2, ducet(T2), false, false),
-
-    case {R1, R2} of
-    {stop, stop} -> ?RES(ucol_weights:result(W1));
-    {stop, {ok, E2, NewUS2}} -> compare_right_remain_(NewUS2, E2, W1);
-    {{ok, E1, NewUS1}, stop} ->  compare_left_remain_(NewUS1, E1, W1);
-    %% `{ok, WeightElement, NewUcolString}'
-    {{ok, E1, NewUS1}, {ok, E2, NewUS2}} ->
-%       io:format(user, "E1: ~w ~nE2: ~w~n", [E1, E2]),
-        case ucol_weights:compare(E1, E2, W1) of
-            less -> ?RES(less);
-            greater -> ?RES(greater);
-            equal -> ?RES(equal);
-            W2 ->
-                NewT1 = ucol_weights:type(E1), 
-                NewT2 = ucol_weights:type(E2), 
-                compare_(NewUS1, NewUS2, W2, NewT1, NewT2)
-        end
-    end.
-
-
-compare_right_remain_(US2, E2, W1) ->
-    case ucol_weights:compare_right_remain(E2, W1) of
-        less -> ?RES(less);
-        greater -> ?RES(greater);
-        equal -> ?RES(equal);
-        W2 ->
-            T2 = ucol_weights:type(E2), 
-            R2 = extract(US2, ducet(T2), false, false),
-            case R2 of
-                stop -> ?RES(ucol_weights:result(W2));
-                {ok, NewE2, NewUS2} -> 
-                    compare_right_remain_(NewUS2, NewE2, W2) 
-            end
-    end.
-
-
-compare_left_remain_(US1, E1, W1) ->
-    case ucol_weights:compare_left_remain(E1, W1) of
-        less -> ?RES(less);
-        greater -> ?RES(greater);
-        equal -> ?RES(equal);
-        W2 ->
-            T1 = ucol_weights:type(E1), 
-            R1 = extract(US1, ducet(T1), false, false),
-            case R1 of
-                stop -> ?RES(ucol_weights:result(W2));
-                {ok, NewE1, NewUS1} -> 
-                    compare_left_remain_(NewUS1, NewE1, W2) 
-            end
-    end.
-
-
-
-%% Returns a ducet array.
-%% The default value is non_variable.
-ducet(variable) ->
-    ucol_unidata:var_ducet();
-
-ducet(non_variable) ->
-    ucol_unidata:ducet().
-
-
-%% Produce a longest match of code points in a ducet table.
-extract(Str1, Arr, LastSkippedClass, LastClass) ->
-    IsFirst = LastClass =:= false,
-    case ucol_string:head(Str1) of
-        {{Point, Class}, Str2} ->
-        %% If LastClass =:= false, then it is first point in combining weight.
-
-        %% A non-starter in a string is called blocked if there is another 
-        %% non-starter of the same canonical combining class or zero between 
-        %% it and the last character of canonical combining class 0.
-        HasSkipped = LastSkippedClass =/= false,
-        IsBlocked = HasSkipped andalso 
-            (LastSkippedClass =:= Class orelse Class =:= 0),
-        %% End of a suggestion list.
-        IsStopped = not IsFirst andalso LastClass > Class,
-        CanSkipped = LastClass =/= false 
-            andalso LastClass =< Class 
-            andalso Class =/= 0,
-
-
-        if IsStopped; IsBlocked ->
-            handle_stopped(ucol_string:back(Str2), Arr);
-
-            %% Last skipped point was non-blocked.
-            true -> 
-                case ucol_array:get(Point, Arr) of
-                    {element, Elem} -> {ok, Elem, ucol_string:fix(Str2)};
-
-                    %% Try search longer element
-                    {array, SubArr} -> 
-                        extract(Str2, SubArr, LastSkippedClass, Class);
-
-                    %% Make an implicit weight
-                    none when IsFirst -> 
-                        {ok, ucol_implicit:synthesize(Point), 
-                            ucol_string:fix(Str2)};
-
-                    %% Skip a char
-                    none when CanSkipped -> 
-                        Str3 = ucol_string:back_and_skip(Str2),
-                        extract(Str3, Arr, Class, Class);
-
-                    none -> 
-                        Str3 = ucol_string:back(Str2),
-                        handle_stopped(Str3, Arr);
-
-                    {empty, Type} -> 
-                        Str3 = ucol_string:fix(Str2),
-                        extract(Str3, ducet(Type), false, false) end
-
-            end;
-        stop when IsFirst -> stop;
-        stop -> 
-            case ucol_array:get(0, Arr) of
-                none -> handle_no_more(Str1); % no_more
-                {element, Elem} -> 
-                    {ok, Elem, ucol_string:fix(Str1)};
-                {empty, Type} -> stop end
-    end.
-
-
-handle_stopped(Str1, Arr) -> 
-    case ucol_array:get(0, Arr) of
-        none -> handle_no_more(Str1); % no_more
-
-        {element, Elem} -> 
-            {ok, Elem, ucol_string:fix(Str1)};
-
-        {empty, Type} -> 
-            Str2 = ucol_string:fix(Str1),
-            extract(Str2, ducet(Type), false, false) end.
-
-
-%% It is a special case, when there are a ducet weight for one and three 
-%% elements, but there is no a value for two elements.
-handle_no_more(Str1) ->
-    Str2 = ucol_string:back_and_skip(Str1),
-    Buf = ucol_string:head_buffer(Str2),
-    Arr = extract_again(Buf, ducet(non_variable)),
-    LastSkippedClass = ucol_string:last_skipped_class(Str2),
-    LastClass = ucol_string:last_class(Str2),
-    extract(Str2, Arr, LastSkippedClass, LastClass).
-
-
-extract_again([{H,_Class}|T], Arr) -> 
-    {array, NewArr} = ucol_array:get(H, Arr),
-    extract_again(T, NewArr);
-
-extract_again([], Arr) -> Arr.
 
 
 

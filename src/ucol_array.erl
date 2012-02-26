@@ -1,12 +1,24 @@
 -module(ucol_array).
--export([new/0, set/3, get/2]).
+-export([new/0, set/3, get/2, fix/1]).
 
 
 
 new() -> array:new().
 
 
-set([H|T] = _CPList, Weights, Arr) ->
+fix(Arr) ->  
+    array:fix(array:map(fun fix_elem/2, Arr)).
+
+
+fix_elem(_Idx, Elem) -> 
+    case array:is_array(Elem) of
+        true -> fix(Elem);
+        false -> Elem
+    end.
+
+
+set([H|T] = _CPList, Weights, Arr)
+    when is_integer(H) ->
     Old = array:get(H, Arr),
     New = case {T, type(Old)} of
         %% H is a first element
@@ -24,11 +36,18 @@ set([H|T] = _CPList, Weights, Arr) ->
     array:set(H, New, Arr).
     
 
-get(CP, Arr) ->
-    Value = array:get(CP, Arr),
-    case type(Value) of
-    none -> none;
-    Type -> {Type, Value}
+get(CP, Arr)
+    when is_integer(CP) ->
+    case array:get(CP, Arr) of
+        undefined -> none; % not in array
+        variable -> {empty, variable}; % for ucol
+        non_variable -> {empty, non_variable}; 
+        empty -> empty; % for ucol_primary
+        Val ->
+            case array:is_array(Val) of
+                false -> {element, Val};
+                true  -> {array, Val} 
+            end
     end.
 
 type(undefined) -> none;

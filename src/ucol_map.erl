@@ -22,7 +22,7 @@ from_list(List) ->
     TrimmedBinMap = trim_binary(Max-Min+1, BinMap),
     #ucol_map{
         binary=TrimmedBinMap, 
-        array=array:from_orddict(orddict:from_list(Rem)),
+        array=array:fix(array:from_orddict(orddict:from_list(Rem))),
         max=Max, min=Min,
         default=Def
     }.

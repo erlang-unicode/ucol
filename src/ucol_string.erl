@@ -59,7 +59,10 @@ last_skipped_class(#ucol_string{
     skip=[{_Char, Class}|_]}) -> Class.
 
 
-fix(Rec=#ucol_string{head=[], skip=[]}) -> Rec;
+fix(Rec=#ucol_string{skip=[], head=[]}) -> 
+    Rec;
+fix(Rec=#ucol_string{skip=[]}) -> 
+    Rec#ucol_string{head=[]};
 fix(Rec=#ucol_string{skip=Skip, tail=Tail}) -> 
     Rec#ucol_string{head=[], skip=[], tail=lists:reverse(Skip, Tail)}.
 

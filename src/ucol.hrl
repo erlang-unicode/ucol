@@ -1,5 +1,8 @@
+
+%%
 %% Defines Hangul constants
 %% Hangul characters can be decompize to LV or LVT forms.
+%%
 
 -define(HANGUL_SBASE,  16#AC00).
 -define(HANGUL_LBASE,  16#1100). % 4352 - 4371
@@ -67,7 +70,9 @@
 -define(DECOMP_CLASS, 100).
 
 
-
+%%
+%% Implicit weights
+%%
 
 -define(UNIHAN_CORE_BLOCKS, [
     'CJK Compatibility Ideographs',
@@ -87,3 +92,24 @@
 -define(UNIHAN_CORE_BASE, 16#FB40).
 -define(UNIHAN_EXT_BASE, 16#FB80).
 -define(DEFAULT_BASE, 16#FBC0).
+
+
+
+%%
+%% Latin1
+%%
+
+-define(IS_SIMPLE_UPPER_CHAR(X), ($A =< (X) andalso (X) =< $Z)).
+-define(IS_SIMPLE_LOWER_CHAR(X), ($a =< (X) andalso (X) =< $z)).
+-define(IS_SIMPLE_NUMBER_CHAR(X), ($0 =< (X) andalso (X) =< $9)).
+-define(CHAR_TYPE(X), (if
+        (X) > 122 -> unicode;
+        ?IS_SIMPLE_UPPER_CHAR(X) -> upper;
+        ?IS_SIMPLE_LOWER_CHAR(X) -> lower;
+        ?IS_SIMPLE_NUMBER_CHAR(X) -> number;
+        true -> unicode 
+    end)).
+
+%% Number < Lower < Upper
+
+-define(CHAR_GAP, 32). % $a - $A

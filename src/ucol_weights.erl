@@ -1,30 +1,25 @@
 -module(ucol_weights).
--include("ucol.hrl").
 
 %% For generators (ucol_data)
 -export([decode/1]).
+-export([primary_weight/1]).
 
-
+%% for ucol.erl
 -export([compare/3, 
         compare_left_remain/2,
         compare_right_remain/2,
         new/0, 
         new/1, 
-        empty/0,
         empty/1,
         result/1, 
         type/1, 
         is_empty/1]).
 
--export([hangul_type/1,
-        hangul_point/1]).
+
+-include("ucol.hrl").
+-include("ucol_weights.hrl").
 
 
--define(M, ?MODULE).
-
--record(state, {
-    left_l1, right_l1
-}).
 
 -record(mem, {
     state, l1, l2, l3, l4
@@ -34,10 +29,14 @@
 %% Create a new comparator
 new() -> undefined.
 
+
+%% Create a new comparator where L3=X
 new(equal) -> undefined;
 new(X) when X =:= less; X =:= greater -> #mem{l1=equal, l2=equal, l3=X}.
 
+
 %% Create a new weight. Used as a mock for compare/3
+%% @private
 empty() -> {non_variable, [], [], [], []}.
 
 
@@ -82,26 +81,8 @@ result_list([]) -> equal.
 compare(W1, W2, undefined) ->
     {_, W1L1, W1L2, W1L3, W1L4} = W1,
     {_, W2L1, W2L2, W2L3, W2L4} = W2,
-    
-    IsLeftHangulL = case W1L1 of
-        {hangul_l, _} -> true;
-        _ -> false end,
 
-    if W1 =:= W2, not IsLeftHangulL -> undefined; % Can be skipped
-    true ->
-    {StateL, NewW1L1} = case W1L1 of
-        {hangul_l, W1L1X} -> process_hangul(x, W1L1X);
-        _W1L1 -> {x, W1L1} end,
-
-    {StateR, NewW2L1} = case W2L1 of
-        {hangul_l, W2L1X} -> process_hangul(x, W2L1X);
-        _W2L1 -> {x, W2L1} end,
-
-    NewState = case {StateL, StateR} of
-            {x, x} -> undefined;
-            {_, _} -> #state{left_l1=StateL, right_l1=StateR}
-        end,
-
+    {NewW1L1, NewW2L1, NewState} = hangul_l1(W1L1, W2L1),
     L1 = simple_compare_elems(NewW1L1, NewW2L1),
     if 
         L1 =:= less; L1 =:= greater -> L1;
@@ -128,40 +109,13 @@ compare(W1, W2, undefined) ->
 
     end  % L3
     end  % L2
-    end  % L1
-    end; % Can be skipped?
+    end; % L1
 
 compare(W1, W2, M=#mem{state=State, l1=X1, l2=X2, l3=X3, l4=X4}) ->
     {_, W1L1, W1L2, W1L3, W1L4} = W1,
     {_, W2L1, W2L2, W2L3, W2L4} = W2,
 
-    {IsHangulL, W1L1X} = case W1L1 of
-        {hangul_l, W1L1I} -> {true, W1L1I};
-        _W1L1 -> {false, W1L1} end,
-
-    {IsHangulR, W2L1X} = case W2L1 of
-        {hangul_l, W2L1I} -> {true, W2L1I};
-        _W2L1 -> {false, W2L1} end,
-
-    {OldStateHangulL, OldStateHangulR} = case State of
-        undefined -> {x, x};
-        #state{left_l1=LeftL1, right_l1=RightL1} -> 
-            {LeftL1, RightL1} end,
-
-    {StateL, NewW1L1} = if
-        IsHangulL; OldStateHangulL =/= x -> 
-            process_hangul(OldStateHangulL, W1L1X);
-        true -> {x, W1L1X} end,
-
-    {StateR, NewW2L1} = if
-        IsHangulR; OldStateHangulR =/= x -> 
-            process_hangul(OldStateHangulR, W2L1X);
-        true -> {x, W2L1X} end,
-
-    NewState = case {StateL, StateR} of
-            {x, x} -> undefined;
-            {_, _} -> #state{left_l1=StateL, right_l1=StateR}
-        end,
+    {NewW1L1, NewW2L1, NewState} = hangul_l1(State, W1L1, W2L1),
 
     NewM = M#mem{state=NewState},
 
@@ -201,6 +155,12 @@ compare(W1, W2, M=#mem{state=State, l1=X1, l2=X2, l3=X3, l4=X4}) ->
     end. % X4
 
 
+%%
+%% Compare remains. 
+%% There are remains, when one string is longer then another.
+%% Called from `ucol.erl'.
+%%
+
 compare_left_remain(W1, M) ->
     W2 = empty(),
     case compare(W1, W2, M) of
@@ -215,162 +175,6 @@ compare_right_remain(W2, M) ->
         #mem{l1={right,_}} -> less;
         X -> X
     end.
-    
-
-%% Hangul (Terminator method): 
-%%      LVX = LV_X 
-%%      LVL = LV_L
-%%      LVT = LVT_
-%%      LVV = LVV_
-%%      LLV = LLV_
-%% Terminator: _ = 16#24C9.
-
-process_hangul(State, Weight) when is_integer(Weight) ->
-    process_hangul(State, [Weight], []);
-
-process_hangul(State, Weights) ->
-    process_hangul(State, Weights, []).
-    
-
-process_hangul(x, [H|T], Acc) when ?IS_L1_OF_HANGUL_L(H) ->
-    process_hangul(l, T, [H|Acc]);
-
-process_hangul(l, [H|T], Acc) when ?IS_L1_OF_HANGUL_L(H) ->
-    process_hangul(ll, T, [H|Acc]);
-
-process_hangul(l, [H|T], Acc) when ?IS_L1_OF_HANGUL_V(H) ->
-    process_hangul(lv, T, [H|Acc]);
-
-process_hangul(ll, [H|T], Acc) when ?IS_L1_OF_HANGUL_V(H) ->
-    process_hangul(x, T, [?COL_HANGUL_TERMINATOR, H|Acc]); %% LLV_
-
-
-%%      LVX = LV_X 
-%%      LVL = LV_L
-%%      LVT = LVT_
-%%      LVV = LVV_
-process_hangul(lv, [H|T], Acc) 
-    when ?IS_L1_OF_HANGUL_T(H); ?IS_L1_OF_HANGUL_V(H) ->
-    process_hangul(x, T, [?COL_HANGUL_TERMINATOR, H|Acc]); %% LVV, LVT
-
-process_hangul(lv, [H|T], Acc) when ?IS_L1_OF_HANGUL_L(H) ->
-    process_hangul(l, T, [H, ?COL_HANGUL_TERMINATOR|Acc]); %% LV_L
-
-process_hangul(lv, [H|T], Acc) ->
-    process_hangul(x, T, [H, ?COL_HANGUL_TERMINATOR|Acc]); %% LV_X
-
-process_hangul(_, [H|T], Acc) ->
-    process_hangul(x, T, [H|Acc]);
-
-process_hangul(State, [], Acc) ->
-    {State, lists:reverse(Acc)}.
-
-
-hangul_point(Point) -> 
-    {element, {_, L1, _, _, _}} 
-        = ucol_array:get(Point, ucol_unidata:ducet()),
-    case L1 of
-        {hangul_l, [_|_]=L1X} -> [hangul_type(X) || X <- L1X];
-        {hangul_l, _} -> l;
-        [_|_] -> [hangul_type(X) || X <- L1];
-        _ -> hangul_type(L1)
-    end.
-
-
-hangul_type(X) when ?IS_L1_OF_HANGUL_L(X) -> l;
-hangul_type(X) when ?IS_L1_OF_HANGUL_V(X) -> v;
-hangul_type(X) when ?IS_L1_OF_HANGUL_T(X) -> t;
-hangul_type(X) -> x.
-
-%% Finish hangul comparation.
-hangul_result(lv) -> [?COL_HANGUL_TERMINATOR];
-hangul_result(_) -> [].
-
-
-
-compare_filled_elems(equal, W1, W2) ->
-    simple_compare_elems(W1, W2); 
-
-compare_filled_elems({left, Q}, W1, W2) ->
-    compare_left(Q, to_list(W1), to_list(W2));
-
-compare_filled_elems({right, Q}, W1, W2) ->
-    compare_right(Q, to_list(W1), to_list(W2)).
-
-
-to_list(X) when is_integer(X) -> [X];
-to_list(X) -> X.
-
-
-compare_left(Q, W1, [W2H|W2T]) ->
-    case queue:out(Q) of
-    {{value, W2H}, QT} -> % equal
-        compare_left(QT, W1, W2T);
-
-    {{value, W1H}, _QT} ->
-        if W1H<W2H -> less;
-              true -> greater end;
-
-    {empty, _EmptyQueue} ->
-        simple_compare_elems(W1, W2T)
-    end;
-
-compare_left(Q, W1, []) -> 
-    check_query(left, list_to_queue(W1, Q)).
-
-
-compare_right(Q, [W1H|W1T], W2) ->
-    case queue:out(Q) of
-    {{value, W1H}, QT} -> % equal
-        compare_right(QT, W1T, W2);
-
-    {{value, W2H}, _QT} ->
-        if W1H<W2H -> less;
-              true -> greater end;
-
-    {empty, _EmptyQueue} ->
-        simple_compare_elems(W1T, W2)
-    end;
-
-compare_right(Q, [], W2) -> 
-    NewQ = list_to_queue(W2, Q),
-    check_query(right, list_to_queue(W2, Q)).
-    
-
-check_query(Type, Q) ->
-    case queue:is_empty(Q) of
-        true -> equal;
-        false -> {Type, Q} end.
-
-
-list_to_queue([H|T], Q) -> list_to_queue(T, queue:in(H, Q));
-list_to_queue([], Q) -> Q.
-
-    
-simple_compare_elems(W1, W1) -> equal;
-simple_compare_elems(W1, W2) when is_integer(W1) -> 
-    if is_integer(W2) -> 
-            if W1<W2 -> less;
-                true -> greater end;
-       true -> % is_list(W2)
-            compare_lists([W1], W2) end;
-
-simple_compare_elems(W1, W2) when is_integer(W2) -> % is_list(W1)
-    compare_lists(W1, [W2]);
-
-simple_compare_elems(W1, W2) -> % is_list(W1), is_list(W2)
-    compare_lists(W1, W2).
-
-
-compare_lists([H|T1], [H|T2]) -> compare_lists(T1, T2);
-compare_lists([H1|_], [H2|_]) -> 
-    if H1<H2 -> less;
-        true -> greater end;
-compare_lists([], []) -> equal;
-compare_lists([], W2) -> 
-    check_query(right, queue:from_list(W2));
-compare_lists(W1, __) ->
-    check_query(left, queue:from_list(W1)).
 
     
 
@@ -385,6 +189,10 @@ decode(Bin) when is_binary(Bin) ->
     {build(shifted(List, [])), build(shifted2(List, []))}.
 
 
+%%
+%% Data helpers
+%%
+
 %% Build a turple of lists from a list of turples
 build({Var,List}) ->
     Empty = {[], [], [], []},
@@ -398,19 +206,9 @@ check([X]) -> X;
 check(X) -> lists:reverse(X). %% MARK1
 
 
-l1_hack(X) when is_integer(X), ?IS_L1_OF_HANGUL_L(X) -> {hangul_l, [X]};
-l1_hack(X) when is_integer(X) -> X;
-l1_hack(List) ->
-    HasHangulL = lists:any(fun(X) -> ?IS_L1_OF_HANGUL_L(X) end, List),
-    case HasHangulL of
-        true -> {hangul_l, List};
-        false -> List
-    end.
-
-
 %% Check and add a weight element on a level.
 add_elem(0, T) -> T;
-add_elem(H, T) -> [H|T]. %% MARK1: reversed insert
+add_elem(H, T) -> [H|T]. %% see MARK1: reversed insert
 
 
 add_tuple(Tuple, Acc) -> 
@@ -422,6 +220,39 @@ add_tuple(Tuple, Acc) ->
     , add_elem(L4H, L4T)
     }.
 
+
+%%
+%% Hangul helpers
+%%
+
+%% It is helper for __debugging__ only.
+%% It converts code paint to a list of hangul types (L, V, T or X).
+hangul_point(Point) -> 
+    {element, {_, L1, _, _, _}} 
+        = ucol_array:get(Point, ucol_unidata:ducet()),
+
+    Types = case L1 of
+        {hangul_l, [_|_]=L1X} -> [ucol_hangul:type(X) || X <- L1X];
+        {hangul_l, _} -> [l];
+        [_|_] -> [ucol_hangul:type(X) || X <- L1];
+        _ -> [ucol_hangul:type(L1)]
+    end.
+
+
+hangul_result(State) -> ucol_hangul:result(State).
+process_hangul(State, Weight) -> ucol_hangul:process(State, Weight).
+l1_hack(L1) -> ucol_hangul:add_mark(L1).
+    
+
+primary_weight({Type, [], _, _, _}) -> empty;
+primary_weight({Type, L1, _, _, _}) -> L1.
+
+
+%%
+%% Decode Helpers
+%% This functions convert weights from ux format to ucol format.
+%% for `ucol_data'
+%%
 
 bin_to_list(Bin) ->
     do_bin_to_list(Bin, []).
@@ -435,8 +266,6 @@ do_bin_to_list(<<Var:8, L1:16, L2:8, L3:8, L4:16, Rem/binary>>, Res) ->
     do_bin_to_list(Rem, [El|Res]);
 do_bin_to_list(<<>>, Res) ->
     lists:reverse(Res).
-
-
 
 
 % If it is a tertiary ignorable, then L4 = 0.
@@ -455,8 +284,6 @@ shifted([Value|T], Acc) ->
 
 shifted([], Acc) -> 
     {non_variable, lists:reverse(Acc)}.
-
-
 
 
 %% @doc This function is a version of shifted/1, but its value is
@@ -478,15 +305,17 @@ shifted2([], Acc) ->
     {variable, lists:reverse(Acc)}.
 
 
-
 set_l4_to_value({_Variable, L1, L2, L3, _L4}, Val) ->
     {L1, L2, L3, Val}.
 
 
 
 
+
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
+
+-define(M, ?MODULE).
 
 weight(L1,L2,L3,L4) -> {variable,L1,L2,L3,L4}.
 
@@ -532,7 +361,7 @@ error4_test_() ->
     X1 = ?M:new(),
     X2 = ?M:compare(W8049, W945, X1),
     X3 = ?M:compare(W820, W833, X2),
-    X4 = ?M:compare(?M:empty(), W820, X3),
+    X4 = ?M:compare(empty(), W820, X3),
     X5 = ?M:result(X4),
     [?_assertEqual(X5, equal)].
 
@@ -563,35 +392,6 @@ shifted_test_() ->
     %% None of the above
     ,?_assertEqual(shifted([{non_variable,1,2,3,4}], []), 
         {non_variable, [{1,2,3,16#FFFF}]})
-    ].
-
--define(TEST_HANGUL_L1_L, (?COL_HANGUL_LBASE+5)).
--define(TEST_HANGUL_L1_V, (?COL_HANGUL_VBASE+6)).
--define(TEST_HANGUL_L1_T, (?COL_HANGUL_TBASE+4)).
-
-process_hangul_test_() ->
-    [?_assertEqual(process_hangul(l, [?TEST_HANGUL_L1_V, ?TEST_HANGUL_L1_T]),
-        {x, [?TEST_HANGUL_L1_V, ?TEST_HANGUL_L1_T, ?COL_HANGUL_TERMINATOR]})
-    ].
-
-process_hangul_error12_test_() ->
-    S1 = [?COL_HANGUL_LBASE, ?COL_HANGUL_VBASE, ?COL_HANGUL_VBASE],
-    [?_assertEqual(process_hangul(x, S1),
-        {x, S1 ++ [?COL_HANGUL_TERMINATOR]})
-    ].
-
-process_hangul_error12_var2_test_() ->
-    S1 = [?COL_HANGUL_LBASE, ?COL_HANGUL_VBASE],
-    S2 = [?COL_HANGUL_VBASE],
-    [?_assertEqual(process_hangul(x, S1), {lv, S1}) % LV
-    ,?_assertEqual(process_hangul(lv, S2), 
-        {x, S2 ++ [?COL_HANGUL_TERMINATOR]}) % LVV_
-    ].
-
-process_hangul_error14_test_() ->
-    S1 = [?COL_HANGUL_TBASE],
-    [?_assertEqual(process_hangul(lv, S1), 
-        {x, S1 ++ [?COL_HANGUL_TERMINATOR]}) % LVT_
     ].
 
 -endif.
