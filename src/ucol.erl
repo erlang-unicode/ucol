@@ -154,11 +154,11 @@ extract_test_() ->
     S1 = ucol_string:new(<<"test">>),
     Arr = ducet(non_variable),
     LastSkippedClass = LastClass = false,
-    X = {ok, _W1, S2} = extract(S1, Arr, LastSkippedClass, LastClass),
-    {ok, _W2, S3} = extract(S2, Arr, LastSkippedClass, LastClass),
-    {ok, _W3, S4} = extract(S3, Arr, LastSkippedClass, LastClass),
-    {ok, _W4, S5} = extract(S4, Arr, LastSkippedClass, LastClass),
-    stop          = extract(S5, Arr, LastSkippedClass, LastClass),
+    X = {_W1, S2} = extract(S1, Arr, LastSkippedClass, LastClass),
+    {_W2, S3} = extract(S2, Arr, LastSkippedClass, LastClass),
+    {_W3, S4} = extract(S3, Arr, LastSkippedClass, LastClass),
+    {_W4, S5} = extract(S4, Arr, LastSkippedClass, LastClass),
+    stop      = extract(S5, Arr, LastSkippedClass, LastClass),
     [].
 
 compare_test_() ->

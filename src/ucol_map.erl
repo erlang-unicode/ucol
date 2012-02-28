@@ -49,7 +49,7 @@ get(X, #ucol_map{binary=BinMap, separator=Sep, min=Min})
 %   Res;
 
     %% From zero
-    binary:at(BinMap, X-Min-1);
+    binary:at(BinMap, X-Min);
 
 get(X, #ucol_map{array=Arr, default=Def}) ->
     case array:get(X, Arr) of
