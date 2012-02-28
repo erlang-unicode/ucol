@@ -88,7 +88,12 @@ compare_lists(W1, __) ->
     check_query(left, queue:from_list(W1)).
 
 
-hangul_l1(State, W1L1, W2L1) ->
+hangul_l1(undefined, W1L1, W2L1) -> hangul_l1(W1L1, W2L1);
+
+hangul_l1(#state{
+        left_l1=OldStateHangulL, 
+        right_l1=OldStateHangulR
+    }, W1L1, W2L1) ->
     {IsHangulL, W1L1X} = case W1L1 of
         {hangul_l, W1L1I} -> {true, W1L1I};
         _W1L1 -> {false, W1L1} end,
@@ -96,11 +101,6 @@ hangul_l1(State, W1L1, W2L1) ->
     {IsHangulR, W2L1X} = case W2L1 of
         {hangul_l, W2L1I} -> {true, W2L1I};
         _W2L1 -> {false, W2L1} end,
-
-    {OldStateHangulL, OldStateHangulR} = case State of
-        undefined -> {x, x};
-        #state{left_l1=LeftL1, right_l1=RightL1} -> 
-            {LeftL1, RightL1} end,
 
     {StateL, NewW1L1} = if
         IsHangulL; OldStateHangulL =/= x -> 

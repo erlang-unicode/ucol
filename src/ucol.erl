@@ -1,6 +1,12 @@
 -module(ucol).
 -export([compare/2]).
 
+-export([t1/0]).
+
+t1() ->
+    ucol_primary:compare(<<"лол">>, <<"Лол">>).
+
+
 -define(RES(X), X).
 -define(VAL(X), X).
 
@@ -64,8 +70,7 @@ uca_compare(S1, S2) -> uca_compare(S1, S2, equal).
 
 
 uca_compare(S1, S2, L3) ->
-    US1 = ucol_string:new(S1),
-    US2 = ucol_string:new(S2),
+    {US1, US2} = ucol_prefix:handle(S1, S2),
     W1 = ucol_weights:new(L3),
     Arr = ducet(),
     compare_(US1, US2, W1, Arr, Arr).

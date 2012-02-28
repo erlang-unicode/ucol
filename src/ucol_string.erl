@@ -5,6 +5,7 @@
 
 -module(ucol_string).
 -export([new/1, 
+    new_with_head/2,
     head/1, 
     back_and_skip/1, 
     back/1, 
@@ -14,6 +15,8 @@
     last_class/1]).
 
 -export([decomp_class/0]).
+-export([to_nfd/1]).
+
 -include("ucol.hrl").
 
 -type class() :: 0..255.
@@ -37,11 +40,15 @@ new(Str) when is_binary(Str) ->
     #ucol_string{binary=Str}.
 
 
+new_with_head(Str, Head) when is_binary(Str) ->
+    #ucol_string{binary=Str, head=Head}.
+
+
 -spec head(ucol_string()) -> eol | eob | {element(), #ucol_string{}}.
-head(Rec=#ucol_string{tail=[], binary= <<>>}) ->
+head(#ucol_string{tail=[], binary= <<>>}) ->
     stop;
 
-head(Rec=#ucol_string{tail=[], head=Head, skip=Skip, binary=Bin}) ->
+head(Rec=#ucol_string{tail=[], head=Head, binary=Bin}) ->
     {[Cur|Tail], RemBin} = normalize(Bin, 0, []),
     {Cur, Rec#ucol_string{tail=Tail, head=[Cur|Head], binary=RemBin}};
 
@@ -94,18 +101,17 @@ decomp(Point) -> array:get(Point, ucol_unidata:decomp()).
 
 %% Hangul decompose
 normalize(<<Point/utf8, Rem/binary>>, _LastClass, List) 
-    when (Point >= ?HANGUL_SBASE) and (Point =< ?HANGUL_SLAST) ->
-
+    when ?CHAR_IS_HANGUL_S(Point) ->
     SIndex = Point - ?HANGUL_SBASE,
     L = ?HANGUL_LBASE + (SIndex div ?HANGUL_NCOUNT),
     V = ?HANGUL_VBASE + (SIndex rem ?HANGUL_NCOUNT) div ?HANGUL_TCOUNT,
     T = ?HANGUL_TBASE + (SIndex rem ?HANGUL_TCOUNT),
 
     NewList = lists:reverse(List, 
-            case T of
-                ?HANGUL_TBASE -> [{L, 0}, {V, 0}];
-                _ -> [{L, 0}, {V, 0}, {T, 0}]
-            end), 
+        case T of
+            ?HANGUL_TBASE -> [{L, 0}, {V, 0}];
+            _ -> [{L, 0}, {V, 0}, {T, 0}]
+        end),
     {NewList, Rem};
 
 %% For example, string with classes:
@@ -122,7 +128,10 @@ normalize(<<Point/utf8, Rem/binary>>, LastClass, List) ->
     if
     Class =:= 0, List =:= [] -> {[H], Rem}; % Maybe deleted
     Class =:= 0              -> {lists:reverse([H|List]), Rem};
-    Class =:= ?DECOMP_CLASS  -> decompose(decomp(Point), LastClass, List, Rem);
+    Class =:= ?DECOMP_CLASS  -> 
+        {NewLastClass, NewList} = 
+            decompose(decomp(Point), LastClass, List),
+        normalize(Rem, NewLastClass, NewList);
     LastClass =< Class       -> normalize(Rem, Class, [H|List]);
     % not in nf LastClass > Class
     true -> normalize(Rem, LastClass, proper_insert(H, List, []))
@@ -131,13 +140,53 @@ normalize(<<Point/utf8, Rem/binary>>, LastClass, List) ->
 normalize(<<>>, _LastClass, List) -> {lists:reverse(List), <<>>}.
 
 
-decompose([], LastClass, List, Rem) -> normalize(Rem, LastClass, List);
-decompose([H|T], LastClass, List, Rem) -> 
+%% Transform a list of code points into `[{Point, CCC}]'.
+to_nfd(List) -> to_nfd(List, 0, []).
+
+to_nfd([Point|Tail], _, Acc) 
+    when ?CHAR_IS_HANGUL_S(Point) ->
+    SIndex = Point - ?HANGUL_SBASE,
+    L = ?HANGUL_LBASE + (SIndex div ?HANGUL_NCOUNT),
+    V = ?HANGUL_VBASE + (SIndex rem ?HANGUL_NCOUNT) div ?HANGUL_TCOUNT,
+    T = ?HANGUL_TBASE + (SIndex rem ?HANGUL_TCOUNT),
+
+    NewAcc =
+        case T of
+            ?HANGUL_TBASE -> [{V, 0}, {L, 0} | Acc];
+            _ -> [{T, 0},{V, 0}, {L, 0} | Acc]
+        end,
+    to_nfd(Tail, 0, NewAcc);
+
+to_nfd([Point|Tail], LastClass, Acc) -> 
+    Class = ccc(Point),
+    H = {Point, Class},
+    if
+    Class =:= 0              -> to_nfd(Tail, 0, [H|Acc]);
+    Class =:= ?DECOMP_CLASS  -> 
+        {NewLastClass, NewAcc} = 
+            decompose(decomp(Point), LastClass, Acc),
+        to_nfd(Tail, NewLastClass, NewAcc);
+    LastClass =< Class       -> to_nfd(Tail, Class, [H|Acc]);
+    % not in nf LastClass > Class
+    true -> to_nfd(Tail, LastClass, proper_insert(H, Acc, []))
+    end;
+
+to_nfd([], _LastClass, Acc) -> lists:reverse(Acc).
+
+
+%%
+%% Helpers
+%%
+
+
+
+decompose([], LastClass, List) -> {LastClass, List};
+decompose([H|T], LastClass, List) -> 
     {_Point, Class} = H,
     if
-        Class =:= 0 -> decompose(T, Class, [H|List], Rem);
-        LastClass =< Class -> decompose(T, Class, [H|List], Rem);
-        true -> decompose(T, LastClass, proper_insert(H, List, []), Rem)
+        Class =:= 0 -> decompose(T, Class, [H|List]);
+        LastClass =< Class -> decompose(T, Class, [H|List]);
+        true -> decompose(T, LastClass, proper_insert(H, List, []))
     end.
 
 
@@ -321,6 +370,10 @@ error14_test_() ->
     ,?_assertEqual(normalize(<<214,145,224,187,157,97>>, 0, []), 
         {[{1425,220},{3805,0}],<<97>>})
     ].
+
+
+to_nfd_test_() ->
+    [?_assertEqual(?M:to_nfd("abc"), [{$a, 0}, {$b, 0}, {$c, 0}])].
 
 
 

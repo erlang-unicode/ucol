@@ -2,7 +2,8 @@
 
 %% For generators (ucol_data)
 -export([decode/1]).
--export([primary_weight/1]).
+-export([primary_weight/1,
+         is_hangul/1]).
 
 %% for ucol.erl
 -export([compare/3, 
@@ -105,8 +106,8 @@ compare(W1, W2, undefined) ->
     if L1 =:= equal, L2 =:= equal, L3 =:= equal, L4 =:= equal, 
             NewState =:= undefined ->
         undefined;
-        true -> #mem{state=NewState, l1=L1, l2=L2, l3=L3, l4=L4} end
-
+        true -> #mem{state=NewState, l1=L1, l2=L2, l3=L3, l4=L4}
+    end
     end  % L3
     end  % L2
     end; % L1
@@ -117,35 +118,35 @@ compare(W1, W2, M=#mem{state=State, l1=X1, l2=X2, l3=X3, l4=X4}) ->
 
     {NewW1L1, NewW2L1, NewState} = hangul_l1(State, W1L1, W2L1),
 
-    NewM = M#mem{state=NewState},
-
     L1 = compare_filled_elems(X1, NewW1L1, NewW2L1),
     if 
         L1 =:= less; L1 =:= greater -> L1;
         true -> 
 
-    if X2 =:= less; X2 =:= greater -> NewM#mem{l1=L1};
+    if X2 =:= less; X2 =:= greater -> #mem{state=NewState, l1=L1, l2=X2};
         true ->
     L2 = compare_filled_elems(X2, W1L2, W2L2),
 
-    if L2 =:= less; L2 =:= greater -> NewM#mem{l1=L1, l2=L2};
+    if L2 =:= less; L2 =:= greater -> #mem{state=NewState, l1=L1, l2=L2};
         true ->
 
-    if X3 =:= less; X3 =:= greater -> NewM#mem{l1=L1, l2=L2};
+    if X3 =:= less; X3 =:= greater -> #mem{state=NewState, l1=L1, l2=L2, l3=X3};
         true ->
     L3 = compare_filled_elems(X3, W1L3, W2L3),
 
-    if L3 =:= less; L3 =:= greater -> NewM#mem{l1=L1, l2=L2, l3=L3};
+    if L3 =:= less; L3 =:= greater -> #mem{state=NewState, l1=L1, l2=L2, l3=L3};
         true ->
 
-    if X4 =:= less; X4 =:= greater -> NewM#mem{l1=L1, l2=L2, l3=L3};
+    if X4 =:= less; X4 =:= greater -> 
+            #mem{state=NewState, l1=L1, l2=L2, l3=L3, l4=X4};
         true ->
     L4 = compare_filled_elems(X4, W1L4, W2L4),
 
     if L1 =:= equal, L2 =:= equal, L3 =:= equal, L4 =:= equal, 
         NewState =:= undefined ->
         undefined;
-        true -> NewM#mem{l1=L1, l2=L2, l3=L3, l4=L4} end
+        true -> 
+            #mem{state=NewState, l1=L1, l2=L2, l3=L3, l4=L4} end
 
     end  % L1
     end  % X2
@@ -247,6 +248,13 @@ l1_hack(L1) -> ucol_hangul:add_mark(L1).
 primary_weight({Type, [], _, _, _}) -> empty;
 primary_weight({Type, L1, _, _, _}) -> L1.
 
+%% Check any of L1 elements is in L, V form.
+is_hangul(X) when is_integer(X) -> is_l1_hangul(X);
+is_hangul([_|_]=X) -> lists:any(fun is_l1_hangul/1, X);
+is_hangul(_) -> false.
+
+
+is_l1_hangul(X) -> ?IS_L1_OF_HANGUL_V(X) orelse ?IS_L1_OF_HANGUL_L(X).
 
 %%
 %% Decode Helpers

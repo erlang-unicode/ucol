@@ -20,6 +20,11 @@
 -define(HANGUL_TLAST,  (?HANGUL_TBASE + ?HANGUL_TCOUNT)).
 
 
+
+-define(CHAR_IS_HANGUL_S(Ch), (
+ (Ch>=?HANGUL_SBASE) and (Ch=<?HANGUL_SLAST)
+)).
+
 -define(CHAR_IS_HANGUL_L(Ch), (
  (Ch>=?HANGUL_LBASE) and (Ch=<?HANGUL_LLAST)
 )).

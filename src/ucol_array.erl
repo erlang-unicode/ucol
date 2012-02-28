@@ -14,8 +14,8 @@ fix(UArr=#ucol_array{array=Arr}) ->
         array=array:fix(array:map(fun fix_elem/2, Arr))
     }.
 
-
-fix_elem(_Idx, Arr=#ucol_array{}) -> fix(Arr);
+%% Comment to save memory
+%fix_elem(_Idx, Arr=#ucol_array{}) -> fix(Arr);
 fix_elem(_Idx, Elem) -> Elem.
 
 
@@ -51,11 +51,9 @@ set_(Point, Weights, Old=#ucol_array{array=OldArr, max=OldMax})
     }.
 
 
-get(CP, #ucol_array{max=Max}) 
-    when CP > Max -> none;
 
-get(CP, #ucol_array{array=Arr})
-    when is_integer(CP) ->
+get(CP, #ucol_array{max=Max, array=Arr})
+    when is_integer(CP), CP =< Max -> 
     case array:get(CP, Arr) of
         undefined -> none; % not in array
         variable -> {empty, variable}; % for ucol
@@ -63,7 +61,10 @@ get(CP, #ucol_array{array=Arr})
         empty -> empty; % for ucol_primary
         Val=#ucol_array{} -> {array, Val};
         Val -> {element, Val}
-    end.
+    end;
+
+get(_, _) -> none.
+
 
 type(undefined) -> none;
 type(variable) -> empty;

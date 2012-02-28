@@ -42,9 +42,14 @@ get(X, #ucol_map{default=Def, min=Min, max=Max}) when X < Min; X > Max ->
 
 get(X, #ucol_map{binary=BinMap, separator=Sep, min=Min}) 
     when X =< Sep ->
-    Skip = (X-Min)*8,
-    <<_:Skip, Res, _/binary>> = BinMap,
-    Res;
+
+%% Old realization:
+%   Skip = (X-Min)*8,
+%   <<_:Skip, Res, _/binary>> = BinMap,
+%   Res;
+
+    %% From zero
+    binary:at(BinMap, X-Min-1);
 
 get(X, #ucol_map{array=Arr, default=Def}) ->
     case array:get(X, Arr) of

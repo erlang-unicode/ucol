@@ -16,10 +16,10 @@ compare_(US1, US2, W1, A1, A2) ->
 
     case {R1, R2} of
     {stop, stop} -> ?RES(?WEIGHTS_MODULE:result(W1));
-    {stop, {ok, E2, NewUS2}} -> compare_right_remain_(NewUS2, A2, E2, W1);
-    {{ok, E1, NewUS1}, stop} ->  compare_left_remain_(NewUS1, A1, E1, W1);
-    %% `{ok, WeightElement, NewUcolString}'
-    {{ok, E1, NewUS1}, {ok, E2, NewUS2}} ->
+    {stop, {E2, NewUS2}} -> compare_right_remain_(NewUS2, A2, E2, W1);
+    {{E1, NewUS1}, stop} ->  compare_left_remain_(NewUS1, A1, E1, W1);
+    %% `{WeightElement, NewUcolString}'
+    {{E1, NewUS1}, {E2, NewUS2}} ->
 %       io:format(user, "E1: ~w ~nE2: ~w~n", [E1, E2]),
         case ?WEIGHTS_MODULE:compare(E1, E2, W1) of
             less -> ?RES(less);
@@ -43,7 +43,7 @@ compare_right_remain_(US2, A2, E2, W1) ->
             R2 = extract(US2, NewA2, false, false),
             case R2 of
                 stop -> ?RES(?WEIGHTS_MODULE:result(W2));
-                {ok, NewE2, NewUS2} -> 
+                {NewE2, NewUS2} -> 
                     compare_right_remain_(NewUS2, NewA2, NewE2, W2) 
             end
     end.
@@ -59,7 +59,7 @@ compare_left_remain_(US1, A1, E1, W1) ->
             R1 = extract(US1, NewA1, false, false),
             case R1 of
                 stop -> ?RES(?WEIGHTS_MODULE:result(W2));
-                {ok, NewE1, NewUS1} -> 
+                {NewE1, NewUS1} -> 
                     compare_left_remain_(NewUS1, NewA1, NewE1, W2) 
             end
     end.
@@ -92,7 +92,7 @@ extract(Str1, Arr, LastSkippedClass, LastClass) ->
             %% Last skipped point was non-blocked.
             true -> 
                 case ucol_array:get(Point, Arr) of
-                    {element, Elem} -> {ok, Elem, ucol_string:fix(Str2)};
+                    {element, Elem} -> {Elem, ucol_string:fix(Str2)};
 
                     %% Try search longer element
                     {array, SubArr} -> 
@@ -100,8 +100,7 @@ extract(Str1, Arr, LastSkippedClass, LastClass) ->
 
                     %% Make an implicit weight
                     none when IsFirst -> 
-                        {ok, implicit(Point), 
-                            ucol_string:fix(Str2)};
+                        {implicit(Point), ucol_string:fix(Str2)};
 
                     %% Skip a char
                     none when CanSkipped -> 
@@ -113,6 +112,7 @@ extract(Str1, Arr, LastSkippedClass, LastClass) ->
                         handle_stopped(Str3, Arr);
 
                     Other -> 
+                        %% This action can be specified.
                         ?HANDLE_OTHER(Str2, Other)
                     end
             end;
@@ -121,7 +121,7 @@ extract(Str1, Arr, LastSkippedClass, LastClass) ->
             case ucol_array:get(0, Arr) of
                 none -> handle_no_more(Str1); % no_more
                 {element, Elem} -> 
-                    {ok, Elem, ucol_string:fix(Str1)};
+                    {Elem, ucol_string:fix(Str1)};
                 _Other -> stop end % {empty, Type}
     end.
 
@@ -131,7 +131,7 @@ handle_stopped(Str1, Arr) ->
         none -> handle_no_more(Str1); % no_more
 
         {element, Elem} -> 
-            {ok, Elem, ucol_string:fix(Str1)};
+            {Elem, ucol_string:fix(Str1)};
 
         Other ->
             ?HANDLE_OTHER(Str1, Other) end.
