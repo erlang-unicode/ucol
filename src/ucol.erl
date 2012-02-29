@@ -1,10 +1,10 @@
 -module(ucol).
 -export([compare/2]).
 
+%% examples
 -export([t1/0]).
 
-t1() ->
-    ucol_primary:compare(<<"лол">>, <<"Лол">>).
+t1() -> ucol_primary:compare(<<"лол">>, <<"Лол">>).
 
 
 -define(RES(X), X).

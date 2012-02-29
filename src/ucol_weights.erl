@@ -53,8 +53,6 @@ is_empty(_) -> false.
 
 
 %% Finish comparation
-result(undefined) -> equal;
-result(equal) -> equal;
 result(#mem{state=undefined, l1=L1, l2=L2, l3=L3, l4=L4}) ->
     result_list([L1,L2,L3,L4]);
 result(#mem{state=S, l1=L1, l2=L2, l3=L3, l4=L4}) ->
@@ -62,7 +60,8 @@ result(#mem{state=S, l1=L1, l2=L2, l3=L3, l4=L4}) ->
     W1L1 = hangul_result(LeftL1),
     W2L1 = hangul_result(RightL1),
     NewL1 = compare_filled_elems(L1, W1L1, W2L1),
-    result_list([NewL1,L2,L3,L4]).
+    result_list([NewL1,L2,L3,L4]);
+result(undefined) -> equal.
 
 
 result_list([H|T]) ->

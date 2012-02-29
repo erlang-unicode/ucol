@@ -24,7 +24,6 @@ compare_(US1, US2, W1, A1, A2) ->
         case ?WEIGHTS_MODULE:compare(E1, E2, W1) of
             less -> ?RES(less);
             greater -> ?RES(greater);
-            equal -> ?RES(equal);
             W2 ->
                 NewA1 = ?NEXT_ARRAY(E1, A1), 
                 NewA2 = ?NEXT_ARRAY(E2, A2),
@@ -37,7 +36,6 @@ compare_right_remain_(US2, A2, E2, W1) ->
     case ?WEIGHTS_MODULE:compare_right_remain(E2, W1) of
         less -> ?RES(less);
         greater -> ?RES(greater);
-        equal -> ?RES(equal);
         W2 ->
             NewA2 = ?NEXT_ARRAY(E2, A2), 
             R2 = extract(US2, NewA2, false, false),
@@ -53,7 +51,6 @@ compare_left_remain_(US1, A1, E1, W1) ->
     case ?WEIGHTS_MODULE:compare_left_remain(E1, W1) of
         less -> ?RES(less);
         greater -> ?RES(greater);
-        equal -> ?RES(equal);
         W2 ->
             NewA1 = ?NEXT_ARRAY(E1, A1), 
             R1 = extract(US1, NewA1, false, false),

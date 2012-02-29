@@ -52,16 +52,22 @@ result_elem(equal) -> equal.
 compare(W1L1, W2L1, undefined) ->
     {NewW1L1, NewW2L1, NewState} = hangul_l1(W1L1, W2L1),
     L1 = simple_compare_elems(NewW1L1, NewW2L1),
-    if L1 =:= less; L1 =:= greater -> L1;
+    case L1 of 
+        less -> less;
+        greater -> greater;
         equal -> undefined;
-        true -> #mem{l1=L1} end;
+        _ -> #mem{l1=L1}
+    end;
 
 compare(W1L1, W2L1, M=#mem{state=State, l1=X1}) ->
     {NewW1L1, NewW2L1, NewState} = hangul_l1(State, W1L1, W2L1),
     L1 = compare_filled_elems(X1, NewW1L1, NewW2L1),
-    if 
-        L1 =:= less; L1 =:= greater -> L1;
-        true -> M#mem{state=NewState, l1=L1} end.
+    case L1 of 
+        less -> less;
+        greater -> greater;
+        equal when State =:= undefined -> undefined;
+        _ -> #mem{state=NewState, l1=L1}
+    end.
 
 
 %%
