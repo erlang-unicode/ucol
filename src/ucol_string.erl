@@ -100,15 +100,17 @@ decomp(Point) -> array:get(Point, ucol_unidata:decomp()).
 
 
 %% Hangul decompose
+%% foldl-like function, cannot be a list-comprehension.
 normalize(<<Point/utf8, Rem/binary>>, _LastClass, List) 
     when ?CHAR_IS_HANGUL_S(Point) ->
     SIndex = Point - ?HANGUL_SBASE,
+    %% LVT chars from Halgul
     L = ?HANGUL_LBASE + (SIndex div ?HANGUL_NCOUNT),
     V = ?HANGUL_VBASE + (SIndex rem ?HANGUL_NCOUNT) div ?HANGUL_TCOUNT,
     T = ?HANGUL_TBASE + (SIndex rem ?HANGUL_TCOUNT),
 
     NewList = lists:reverse(List, 
-        case T of
+        case T of %% T is not a tail.
             ?HANGUL_TBASE -> [{L, 0}, {V, 0}];
             _ -> [{L, 0}, {V, 0}, {T, 0}]
         end),

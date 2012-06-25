@@ -57,6 +57,7 @@ get(X, #ucol_map{array=Arr, default=Def}) ->
         Res -> Res end.
 
 
+%% Pos = Max
 get_binary_map(Max, Max, _Def, Last, Rem, Bin) -> {Bin, Rem, Last};
 
 get_binary_map(Pos, Max, Def, Last, [{Pos,Def}|Rem], Bin) ->

@@ -244,8 +244,8 @@ process_hangul(State, Weight) -> ucol_hangul:process(State, Weight).
 l1_hack(L1) -> ucol_hangul:add_mark(L1).
     
 
-primary_weight({Type, [], _, _, _}) -> empty;
-primary_weight({Type, L1, _, _, _}) -> L1.
+primary_weight({_Type, [], _, _, _}) -> empty;
+primary_weight({_Type, L1, _, _, _}) -> L1.
 
 %% Check any of L1 elements is in L, V form.
 is_hangul(X) when is_integer(X) -> is_l1_hangul(X);
@@ -262,17 +262,11 @@ is_l1_hangul(X) -> ?IS_L1_OF_HANGUL_V(X) orelse ?IS_L1_OF_HANGUL_L(X).
 %%
 
 bin_to_list(Bin) ->
-    do_bin_to_list(Bin, []).
-
-do_bin_to_list(<<Var:8, L1:16, L2:8, L3:8, L4:16, Rem/binary>>, Res) ->
-    VarAtom = case Var of
+    [{case Var of
         0 -> non_variable;
         1 -> variable 
-        end,
-    El = {VarAtom, L1, L2, L3, L4},
-    do_bin_to_list(Rem, [El|Res]);
-do_bin_to_list(<<>>, Res) ->
-    lists:reverse(Res).
+      end, L1, L2, L3, L4} 
+     || <<Var:8, L1:16, L2:8, L3:8, L4:16>> <= Bin ].
 
 
 % If it is a tertiary ignorable, then L4 = 0.
