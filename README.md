@@ -19,12 +19,12 @@ equal
 equal
 ```
 
-Based on https://github.com/freeakk/ux
+Based on https://github.com/erlang-unicode/ux
 
 
 Where is `ucol\_unidata`? 
 
-[This](https://github.com/freeakk/ucol\_data) application generates 
+[This](https://github.com/erlang-unicode/ucol\_data) application generates 
 `ucol\_unidata` and `ucol\_testdata` modules. These files can be copied into the
 ebin directory. 
 
